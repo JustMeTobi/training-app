@@ -72,9 +72,22 @@
           </div>
         </div>
       </div>
+      <div class="countdown ${defeated ? 'safe' : ''}" title="When today's quests reset">
+        <span>${defeated ? '🌙 New day in' : '⏳ Enemy strikes in'}</span>
+        <b id="day-countdown">${countdownText()}</b>
+      </div>
       <p class="battle-hint">${defeated
         ? '🏆 Victory! Your daily goal is complete. Extra quests still give XP.'
         : 'Every required quest you finish damages the enemy. Beat it before midnight or it strikes back!'}</p>`;
+  }
+
+  /* Time left until local midnight, when the day rolls over. */
+  function countdownText() {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const secs = Math.max(0, Math.floor((midnight - now) / 1000));
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+    return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
   }
 
   /* ---------- quests ---------- */
@@ -470,6 +483,14 @@
     // Midnight rollover while the app is open
     const tick = () => { if (Game.state) { const rep = Game.ensureToday(); if (rep) { renderAll(); showReport(rep); } } };
     setInterval(tick, 60 * 1000);
+    // Countdown updates every second; roll the day over right at midnight.
+    let lastKey = Game.todayKey();
+    setInterval(() => {
+      const el = document.getElementById('day-countdown');
+      if (el) el.textContent = countdownText();
+      const key = Game.todayKey();
+      if (key !== lastKey) { lastKey = key; tick(); }
+    }, 1000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
   }
 

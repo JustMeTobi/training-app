@@ -122,6 +122,9 @@ h3 { font-size: 1rem; margin: 0; }
 .pip { width: 12px; height: 12px; border-radius: 3px; background: #0e0c22; border: 1px solid var(--line); }
 .pip.on { background: var(--green); border-color: #15803d; box-shadow: 0 0 6px #22c55e88; }
 .goal-num { font-variant-numeric: tabular-nums; }
+.countdown { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-top: .8rem; padding: .55rem .8rem; border-radius: 12px; background: #2a0f14; border: 1px solid #7f1d1d; font-size: .85rem; font-weight: 800; color: #fecaca; }
+.countdown b { font-family: var(--pixel); font-size: .78rem; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+.countdown.safe { background: #0f2a1a; border-color: #166534; color: #bbf7d0; }
 .battle-hint { font-size: .82rem; color: var(--muted); margin: .7rem 0 0; }
 
 /* ---------- tabs ---------- */
