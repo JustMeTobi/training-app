@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>QuestFit — Level up your life</title>
+  <meta name="description" content="A game-like workout and daily task tracker. Complete quests, gain XP, beat enemies and collect gear.">
+  <meta name="theme-color" content="#14112a">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">⚔️ <span>QuestFit</span></div>
+    <div class="topbar-right">
+      <span id="diff-badge" class="diff-badge"></span>
+      <span id="date-label" class="date-label"></span>
+    </div>
+  </header>
+
+  <main id="app" class="layout" hidden>
+    <aside class="side">
+      <section id="hero-card" class="card hero-card"></section>
+      <section id="battle-card" class="card battle-card"></section>
+    </aside>
+
+    <div class="content">
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="quests" role="tab">📜 Quests <span id="tab-count" class="tab-count"></span></button>
+        <button class="tab" data-tab="gear" role="tab">🛡️ Gear</button>
+        <button class="tab" data-tab="journey" role="tab">🗺️ Journey</button>
+      </nav>
+      <section id="tab-quests" class="tab-panel"></section>
+      <section id="tab-gear" class="tab-panel" hidden></section>
+      <section id="tab-journey" class="tab-panel" hidden></section>
+    </div>
+  </main>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
