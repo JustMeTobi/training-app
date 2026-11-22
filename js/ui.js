@@ -309,13 +309,16 @@
         floatText(anchor, `+${ev.amount} XP`, 'xp');
         animate($('#hero-art'), 'attack');
         animate($('#enemy-art'), 'hit');
+        Sound.play('complete');
       } else if (ev.type === 'bonus') {
+        setTimeout(() => Sound.play('bonus'), 250);
         toast(`🎯 Daily goal bonus: +${ev.amount} XP`, 'gold');
       } else if (ev.type === 'defeat') {
         enqueueModal((done) => {
           const it = ev.item, R = RARITIES[it.rarity];
           const cur = Game.equippedItem(it.slot);
           const better = cur && cur.id !== it.id && it.bonus > cur.bonus;
+          Sound.play('victory');
           const m = modal(`
             <div class="modal-burst">🏆</div>
             <h2>Enemy defeated!</h2>
@@ -331,7 +334,7 @@
               <button class="btn ${ev.autoEquip || !better ? 'btn-primary' : 'btn-ghost'}" data-close>Awesome</button>
             </div>`, { onClose: () => { renderAll(); done(); } });
           const eqBtn = m.root.querySelector('#loot-equip');
-          if (eqBtn) eqBtn.addEventListener('click', () => { Game.equip(it.id); m.close(); });
+          if (eqBtn) eqBtn.addEventListener('click', () => { Sound.play('loot'); Game.equip(it.id); m.close(); });
         });
       } else if (ev.type === 'levelup') {
         enqueueModal((done) => {
@@ -339,6 +342,7 @@
           const a = Game.requirements(ev.from, diff), b = Game.requirements(ev.to, diff);
           const rank = RANKS.find(r => r.level > ev.from && r.level <= ev.to);
           const changes = [];
+          Sound.play('levelup');
           if (b.workouts > a.workouts) changes.push(`Daily workouts: ${a.workouts} → <b>${b.workouts}</b>`);
           if (b.tasks > a.tasks) changes.push(`Daily tasks: ${a.tasks} → <b>${b.tasks}</b>`);
           changes.push(`Workouts get tougher (push-ups ${Game.workoutAmount(WORKOUTS[0], ev.from, diff)} → <b>${Game.workoutAmount(WORKOUTS[0], ev.to, diff)}</b>)`);
@@ -360,6 +364,7 @@
   function showReport(report) {
     if (!report) return;
     enqueueModal((done) => {
+      if (report.days.some(d => !d.met)) Sound.play('hurt');
       const lines = report.days.map(d => d.met
         ? `<li class="win">🏆 You beat the ${esc(d.enemy)} and recovered ${d.heal} HP</li>`
         : `<li class="loss">💀 ${d.key === 'skipped' ? 'Skipped day — the' : 'The'} ${esc(d.enemy)} hit you for <b>${d.dmg}</b> damage</li>`).join('');
@@ -414,7 +419,20 @@
     document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = p.id !== `tab-${tab}`; });
   }
 
+  function renderSoundToggle() {
+    const b = $('#sound-toggle');
+    b.textContent = Sound.muted ? '🔇' : '🔊';
+    b.title = Sound.muted ? 'Sound off — tap to turn on' : 'Sound on — tap to mute';
+    b.setAttribute('aria-pressed', String(!Sound.muted));
+  }
+
   function wire() {
+    renderSoundToggle();
+    $('#sound-toggle').addEventListener('click', () => {
+      Sound.setMuted(!Sound.muted);
+      renderSoundToggle();
+      Sound.play('click');
+    });
     document.querySelector('.tabs').addEventListener('click', (e) => {
       const b = e.target.closest('.tab');
       if (b) switchTab(b.dataset.tab);
@@ -435,7 +453,7 @@
         return;
       }
       const u = e.target.closest('[data-undo]');
-      if (u) { Game.undo(u.dataset.undo); renderAll(); toast('↩️ Quest marked as not done'); return; }
+      if (u) { Sound.play('undo'); Game.undo(u.dataset.undo); renderAll(); toast('↩️ Quest marked as not done'); return; }
       const d = e.target.closest('[data-del]');
       if (d) {
         const t = Game.state.tasks.find(x => x.id === d.dataset.del);
@@ -455,7 +473,7 @@
 
     $('#tab-gear').addEventListener('click', (e) => {
       const eq = e.target.closest('[data-equip]');
-      if (eq) { Game.equip(eq.dataset.equip); renderAll(); toast('🛡️ Equipped!'); return; }
+      if (eq) { Sound.play('loot'); Game.equip(eq.dataset.equip); renderAll(); toast('🛡️ Equipped!'); return; }
       const ds = e.target.closest('[data-discard]');
       if (ds && confirm('Discard this item?')) { Game.discard(ds.dataset.discard); renderAll(); }
     });
