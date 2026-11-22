@@ -166,7 +166,7 @@ const Game = (() => {
     for (const t of state.tasks) {
       list.push({
         key: 't:' + t.id, taskId: t.id, kind: t.kind, title: t.title,
-        icon: t.kind === 'workout' ? '🏋️' : '📜',
+        icon: t.forfeit ? '⚖️' : t.kind === 'workout' ? '🏋️' : '📜',
         detail: `${EFFORTS[t.effort].label}${t.repeat === 'once' ? ' · today only' : ''}`,
         xp: effortXP(t.effort, d.level, diff), generated: false,
       });
@@ -206,6 +206,11 @@ const Game = (() => {
         state.day.streakCounted = true;
         state.hero.streak++;
         state.hero.bestStreak = Math.max(state.hero.bestStreak, state.hero.streak);
+        const m = state.motivation;
+        if (m.streakReward.trim() && state.hero.streak % m.streakGoal === 0 && !state.day.streakRewardShown) {
+          state.day.streakRewardShown = true;
+          events.push({ type: 'streakReward', streak: state.hero.streak, reward: m.streakReward });
+        }
       }
       if (!state.day.lootGiven) {
         state.day.lootGiven = true;
@@ -267,12 +272,20 @@ const Game = (() => {
       state.hero.hp = maxHP(info.level);
       report.knockouts++;
       report.xpLost += lost;
+      // The enemy steals one piece of equipped gear.
+      const worn = Object.keys(SLOTS).map(equippedItem).filter(Boolean);
+      if (worn.length) {
+        const it = worn[Math.floor(Math.random() * worn.length)];
+        state.equipped[it.slot] = null;
+        state.inventory = state.inventory.filter(i => i.id !== it.id);
+        report.stolen.push(it.name);
+      }
     }
   }
 
   function settleDays(today) {
     const d = state.day;
-    const report = { days: [], damage: 0, knockouts: 0, xpLost: 0 };
+    const report = { days: [], damage: 0, knockouts: 0, xpLost: 0, stolen: [], penalty: null };
     const p = progress(d);
     state.history.push({ key: d.key, met: p.met, done: p.workouts + p.tasks, enemy: d.enemy.name });
     if (p.met) {
@@ -305,8 +318,38 @@ const Game = (() => {
     if (state.day.key === key) return null;
     const report = settleDays(key);
     newDay(key);
+    // Real-life forfeit: a knockout adds the user's chosen penalty as a quest for today.
+    const pen = state.motivation.penalty.trim();
+    if (report.knockouts && pen) {
+      const t = addTask({ title: `Forfeit: ${pen}`, effort: 'easy', kind: 'task', repeat: 'once' });
+      if (t) { t.forfeit = true; save(); }
+      report.penalty = pen;
+    }
     save();
     return report;
+  }
+
+  /* What happens tonight if the enemy isn't beaten. */
+  function stakes() {
+    const p = progress();
+    const info = levelInfo(state.hero.totalXP);
+    const dmg = p.met ? 0 : Math.max(1, Math.round(state.day.enemy.attack * (1 - p.pct)));
+    const hpAfter = state.hero.hp - dmg;
+    return { dmg, hpAfter, knockout: hpAfter <= 0, xpLoss: Math.floor(info.into / 2), met: p.met };
+  }
+
+  const DEFAULT_MOTIVATION = { why: '', dailyReward: '', streakReward: '', streakGoal: 7, penalty: '' };
+  function setMotivation(m) {
+    const clean = (v) => String(v || '').trim().slice(0, 120);
+    state.motivation = {
+      why: clean(m.why), dailyReward: clean(m.dailyReward), streakReward: clean(m.streakReward),
+      streakGoal: [3, 5, 7, 14, 30].includes(+m.streakGoal) ? +m.streakGoal : 7, penalty: clean(m.penalty),
+    };
+    save();
+  }
+  function hasMotivation() {
+    const m = state.motivation;
+    return !!(m.why || m.dailyReward || m.streakReward || m.penalty);
   }
 
   /* ---------- persistence ---------- */
@@ -320,6 +363,7 @@ const Game = (() => {
       day: null,
       history: [],
       stats: { workouts: 0, tasks: 0, enemies: 0 },
+      motivation: { ...DEFAULT_MOTIVATION },
     };
   }
   function start(name, difficulty) {
@@ -337,6 +381,7 @@ const Game = (() => {
       if (!raw) return false;
       const s = JSON.parse(raw);
       if (!s || !s.hero || !DIFFICULTIES[s.hero.difficulty]) return false;
+      s.motivation = { ...DEFAULT_MOTIVATION, ...(s.motivation || {}) };
       state = s;
       return true;
     } catch { return false; }
@@ -367,6 +412,6 @@ const Game = (() => {
     get state() { return state; },
     todayKey, levelInfo, xpToNext, rankFor, nextRank, maxHP, requirements, gearBonus, equippedItem,
     quests, progress, complete, undo, addTask, removeTask, equip, unequip, discard,
-    ensureToday, start, load, reset, setDifficulty, rename, workoutAmount,
+    stakes, setMotivation, hasMotivation, ensureToday, start, load, reset, setDifficulty, rename, workoutAmount,
   };
 })();

@@ -30,7 +30,7 @@
     const hpMax = Game.maxHP(info.level);
     const hpPct = Math.max(0, Math.min(1, s.hero.hp / hpMax));
     $('#hero-card').innerHTML = `
-      <div class="hero-art" id="hero-art">${Art.hero(s, info.level)}</div>
+      <div class="hero-art ${hpPct < 0.3 ? 'hurt' : ''}" id="hero-art">${Art.hero(s, info.level)}</div>
       <div class="hero-info">
         <div class="hero-name">${esc(s.hero.name)}</div>
         <div class="hero-rank">${esc(rank.title)}</div>
@@ -41,6 +41,7 @@
         <div class="bar hp-bar ${hpPct < 0.3 ? 'low' : ''}"><div class="fill" style="width:${(hpPct * 100).toFixed(1)}%"></div></div>
         <div class="hero-chips">
           <span class="chip" title="Days in a row you beat the enemy">🔥 ${s.hero.streak} day streak</span>
+          ${hpPct < 0.3 ? '<span class="chip chip-danger">🩸 Low HP — win today!</span>' : ''}
           <span class="chip" title="Bonus XP from equipped gear">✨ +${Game.gearBonus()}% XP</span>
         </div>
       </div>`;
@@ -60,6 +61,7 @@
         <span class="eyebrow">Today's enemy</span>
         ${defeated ? '<span class="defeated-tag">DEFEATED</span>' : `<span class="enemy-atk" title="Damage you take tonight if the goal isn't met">⚔️ hits for ${d.enemy.attack}</span>`}
       </div>
+      ${s.motivation.why ? `<div class="why-quote">💭 <span>“${esc(s.motivation.why)}”</span></div>` : ''}
       <div class="battle-row">
         <div class="enemy-art ${defeated ? 'is-defeated' : ''}" id="enemy-art">${Art.enemy(d.enemy.tier)}</div>
         <div class="enemy-info">
@@ -76,9 +78,84 @@
         <span>${defeated ? '🌙 New day in' : '⏳ Enemy strikes in'}</span>
         <b id="day-countdown">${countdownText()}</b>
       </div>
-      <p class="battle-hint">${defeated
-        ? '🏆 Victory! Your daily goal is complete. Extra quests still give XP.'
-        : 'Every required quest you finish damages the enemy. Beat it before midnight or it strikes back!'}</p>`;
+      ${stakesBox()}
+      <button class="btn ${Game.hasMotivation() ? 'btn-ghost' : 'btn-primary'} btn-block-sm" id="reasons-btn">${Game.hasMotivation() ? '✏️ My reasons & rewards' : '🎯 Set your reason, rewards & forfeit'}</button>`;
+  }
+
+  function stakesBox() {
+    const s = Game.state, m = s.motivation, st = Game.stakes();
+    const streakLine = () => {
+      if (!m.streakReward) return '';
+      const left = m.streakGoal - (s.hero.streak % m.streakGoal);
+      if (st.met && left === m.streakGoal) return `<li>🏆 Streak reward earned: <b>${esc(m.streakReward)}</b></li>`;
+      return `<li>🏆 ${left} more win${left > 1 ? 's' : ''} in a row for: <b>${esc(m.streakReward)}</b></li>`;
+    };
+    if (st.met) {
+      return `<div class="stakes win-box">
+        <div class="stakes-title">🏆 Victory! Daily goal complete</div>
+        <ul>
+          ${m.dailyReward ? `<li>🎁 You earned: <b>${esc(m.dailyReward)}</b>. Go enjoy it!</li>` : ''}
+          <li>🔥 Streak is safe at ${s.hero.streak} day${s.hero.streak === 1 ? '' : 's'}</li>
+          ${streakLine()}
+          <li>➕ Extra quests still give XP</li>
+        </ul></div>`;
+    }
+    const hpMax = Game.maxHP(Game.levelInfo(s.hero.totalXP).level);
+    return `<div class="stakes">
+      <div class="stakes-col win">
+        <div class="stakes-title">If you win today</div>
+        <ul>
+          ${m.dailyReward ? `<li>🎁 <b>${esc(m.dailyReward)}</b></li>` : ''}
+          <li>🎒 New gear</li>
+          <li>🔥 Streak → ${s.hero.streak + 1}</li>
+          ${streakLine()}
+        </ul>
+      </div>
+      <div class="stakes-col lose ${st.knockout ? 'danger' : ''}">
+        <div class="stakes-title">If you lose tonight</div>
+        <ul>
+          <li>💔 −${st.dmg} HP <small>(${Math.max(0, s.hero.hp)} → ${Math.max(0, st.hpAfter)})</small></li>
+          ${s.hero.streak ? `<li>🔥 Lose your ${s.hero.streak}-day streak</li>` : ''}
+          ${st.knockout ? `<li class="ko">💀 <b>KNOCKOUT!</b> ${st.xpLoss ? `−${st.xpLoss} XP and ` : ''}the enemy steals a piece of your gear</li>
+            ${m.penalty ? `<li class="ko">⚖️ You owe: <b>${esc(m.penalty)}</b></li>` : ''}` : ''}
+        </ul>
+      </div>
+      ${st.knockout ? '' : `<p class="ko-rule">At 0 HP you get knocked out: you lose XP and a piece of gear${m.penalty ? `, and you owe your forfeit (<b>${esc(m.penalty)}</b>)` : ''}. HP now: ${Math.max(0, s.hero.hp)}/${hpMax}.</p>`}
+    </div>`;
+  }
+
+  function reasonsModal(intro = false) {
+    const m = Game.state.motivation;
+    const md = modal(`
+      <div class="modal-burst">🎯</div>
+      <h2>Why are you fighting?</h2>
+      <p class="muted">Connect the game to your real life. Your reason shows up next to the enemy every day, rewards are things you allow yourself when you win, and the forfeit is what you owe if you get knocked out.</p>
+      <form id="reasons-form" autocomplete="off">
+        <label class="field"><span>💭 My reason</span>
+          <input name="why" maxlength="120" value="${esc(m.why)}" placeholder="e.g. Have energy to play with my kids"></label>
+        <label class="field"><span>🎁 Daily reward (when I beat the enemy)</span>
+          <input name="dailyReward" maxlength="120" value="${esc(m.dailyReward)}" placeholder="e.g. One episode of my show"></label>
+        <div class="field-row">
+          <label class="field"><span>🏆 Big reward for a streak</span>
+            <input name="streakReward" maxlength="120" value="${esc(m.streakReward)}" placeholder="e.g. New running shoes"></label>
+          <label class="field field-narrow"><span>Wins in a row</span>
+            <select name="streakGoal">${[3, 5, 7, 14, 30].map(n => `<option value="${n}" ${n === m.streakGoal ? 'selected' : ''}>${n} days</option>`).join('')}</select></label>
+        </div>
+        <label class="field"><span>⚖️ Forfeit (if I get knocked out)</span>
+          <input name="penalty" maxlength="120" value="${esc(m.penalty)}" placeholder="e.g. No sweets tomorrow, or 50 extra push-ups"></label>
+        <p class="muted small">A knockout adds the forfeit to your quest list for the next day.</p>
+        <div class="modal-actions">
+          ${intro ? '<button type="button" class="btn btn-ghost" data-close>Skip for now</button>' : '<button type="button" class="btn btn-ghost" data-close>Cancel</button>'}
+          <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+      </form>`, { onClose: renderAll });
+    md.root.querySelector('#reasons-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      Game.setMotivation(Object.fromEntries(new FormData(e.target)));
+      Sound.play('loot');
+      md.close();
+      toast('🎯 Your reasons are saved');
+    });
   }
 
   /* Time left until local midnight, when the day rolls over. */
@@ -257,6 +334,7 @@
         <div class="field"><span>Difficulty</span>
           <div class="diff-switch">${Object.values(DIFFICULTIES).map(D => `<button class="btn ${D.id === diff ? 'btn-primary' : 'btn-ghost'}" data-diff="${D.id}">${D.icon} ${D.label}</button>`).join('')}</div>
         </div>
+        <div class="field"><span>Real-life motivation</span><div><button class="btn btn-ghost" id="reasons-btn2">🎯 Edit reason, rewards & forfeit</button></div></div>
         <button class="btn btn-danger mt" id="reset-btn">Start over</button>
       </div>`;
   }
@@ -322,6 +400,7 @@
           const m = modal(`
             <div class="modal-burst">🏆</div>
             <h2>Enemy defeated!</h2>
+            ${Game.state.motivation.dailyReward ? `<div class="real-reward">🎁 Real-life reward unlocked:<b>${esc(Game.state.motivation.dailyReward)}</b></div>` : ''}
             <p>You beat the <b>${esc(ev.enemy.name)}</b>. It dropped:</p>
             <div class="loot rarity-${it.rarity}">
               <div class="loot-icon">${SLOTS[it.slot].icon}</div>
@@ -335,6 +414,18 @@
             </div>`, { onClose: () => { renderAll(); done(); } });
           const eqBtn = m.root.querySelector('#loot-equip');
           if (eqBtn) eqBtn.addEventListener('click', () => { Sound.play('loot'); Game.equip(it.id); m.close(); });
+        });
+      } else if (ev.type === 'streakReward') {
+        enqueueModal((done) => {
+          Sound.play('levelup');
+          modal(`
+            <div class="modal-burst levelup">🏆</div>
+            <h2 class="pixel">${ev.streak}-DAY STREAK!</h2>
+            <p>You beat the enemy ${ev.streak} days in a row. You've earned your big reward:</p>
+            <div class="real-reward big"><b>${esc(ev.reward)}</b></div>
+            <p class="muted">Go claim it. You earned it.</p>
+            <div class="modal-actions"><button class="btn btn-primary" data-close>Claimed! 🎉</button></div>`,
+            { onClose: () => { renderAll(); done(); } });
         });
       } else if (ev.type === 'levelup') {
         enqueueModal((done) => {
@@ -372,7 +463,16 @@
         <div class="modal-burst">🌅</div>
         <h2>A new day begins</h2>
         <ul class="report">${lines}</ul>
-        ${report.knockouts ? `<p class="warn">You were knocked out and lost ${report.xpLost} XP. Get back up, hero!</p>` : ''}
+        ${report.knockouts ? `<div class="ko-box">
+          <b>💀 You were knocked out!</b>
+          <ul>
+            ${report.xpLost ? `<li>Lost ${report.xpLost} XP</li>` : ''}
+            ${report.stolen.map(n => `<li>The enemy stole your <b>${esc(n)}</b></li>`).join('')}
+            ${report.penalty ? `<li>⚖️ Forfeit added to today's quests: <b>${esc(report.penalty)}</b></li>` : ''}
+          </ul>
+          <span>HP restored. Get back up, hero!</span>
+        </div>` : ''}
+        ${Game.state.motivation.why ? `<p class="why-quote">💭 <span>“${esc(Game.state.motivation.why)}”</span></p>` : ''}
         <p>Fresh quests and a new enemy await.</p>
         <div class="modal-actions"><button class="btn btn-primary" data-close>To battle!</button></div>`,
         { onClose: () => { renderAll(); done(); } });
@@ -409,6 +509,7 @@
       Game.start(new FormData(e.target).get('name'), chosen);
       m.close();
       boot();
+      reasonsModal(true);
     });
   }
 
@@ -438,6 +539,9 @@
       if (b) switchTab(b.dataset.tab);
     });
 
+    $('#battle-card').addEventListener('click', (e) => {
+      if (e.target.closest('#reasons-btn')) reasonsModal();
+    });
     $('#tab-quests').addEventListener('click', (e) => {
       const c = e.target.closest('[data-complete]');
       if (c) {
@@ -487,6 +591,7 @@
         }
         return;
       }
+      if (e.target.closest('#reasons-btn2')) { reasonsModal(); return; }
       if (e.target.closest('#reset-btn') && confirm('Start over? This deletes your hero, level and gear.')) {
         Game.reset(); $('#app').hidden = true; onboarding();
       }
