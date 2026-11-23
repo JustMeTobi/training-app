@@ -1,0 +1,16 @@
+{
+  "name": "QuestFit — Level up your life",
+  "short_name": "QuestFit",
+  "description": "A game-like workout and daily task tracker. Complete quests, gain XP, beat enemies and collect gear.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14112a",
+  "theme_color": "#14112a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

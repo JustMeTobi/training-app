@@ -1,31 +1,61 @@
 # ⚔️ QuestFit
 
-A game-like web app for workouts and daily tasks. Finish quests to earn XP, level up your hero, beat the daily enemy and collect gear.
+A game-like web app for workouts and daily tasks. Finish quests to earn XP and gold, level up your hero, beat enemies and bosses, collect gear and unlock achievements.
 
 ## Play
 
-Open `index.html` in a browser. No install or build step. Progress is saved in your browser (localStorage).
+Open `index.html` in a browser, or host it free on **GitHub Pages** (Settings → Pages → *Deploy from a branch* → `main`, `/ (root)`). Progress is saved in your browser.
 
-To host it for free, use **GitHub Pages**: Settings → Pages → *Deploy from a branch* → pick your branch and `/ (root)`.
+**Install it like an app:** on the GitHub Pages version, use *Add to Home Screen* (iPhone: Safari → Share) or *Install app* (Android Chrome). The installed app works offline.
 
-## How it works
+## Features
 
-- **Pick a mode:** 🌱 Beginner, ⚔️ Intermediate or 🔥 Hard. Harder modes have more quests, bigger reps, tougher enemies, more XP and better loot. You can switch modes in **Journey → Settings**.
-- **Daily quests:** each day you get a set of workouts plus your own tasks. Tap a quest to complete it. Finished quests turn green with a ✓, get crossed out and move to **Completed today**. Tap *Undo* if you made a mistake.
-- **Daily enemy:** you need to finish a set number of workouts and tasks each day. Every required quest damages the enemy. If you beat it, you get a bonus, a piece of loot, +1 streak and some HP back the next morning. If you don't, it hits you at midnight. At 0 HP you're knocked out (see below).
-- **Real-life stakes:** set your own *reason* (shown next to the enemy every day), a *daily reward* you allow yourself when you win, a *big reward* for a winning streak, and a *forfeit* you owe if you get knocked out. The enemy card shows exactly what you win today and what you lose tonight.
-- **Knockouts:** at 0 HP you lose half your progress toward the next level, the enemy steals one piece of your equipped gear, and your forfeit is added to the next day's quests.
-- **Levels get harder:** the XP needed per level goes up, workout amounts grow every level, and the number of quests you have to do each day goes up at set levels. **Journey → Level road** shows what's coming.
-- **Gear:** weapons, helmets, armor, shields and boots, in four rarities: Common, Rare, Epic and Legendary. Each piece adds bonus XP, and you can see it on your character.
-- **Your own quests:** use *＋ Add quest* to add tasks or workouts, repeating every day or for today only. Use *✏️ Edit my quests* to delete them.
+**Core**
+- Three modes: 🌱 Beginner, ⚔️ Intermediate and 🔥 Hard. The number of daily quests and the workout sizes grow as you level.
+- A daily enemy you beat by finishing your required workouts and tasks. If it isn't beaten by midnight it hits back, and at 0 HP you're knocked out: you lose XP, a piece of gear, and owe your real-life forfeit.
+- Real-life motivation: your reason, a daily reward, a big streak reward and a forfeit.
+
+**Combat**
+- 👑 **Weekly boss:** every quest you do during the week damages it. Beat it by Sunday midnight for Epic+ gear and gold.
+- 💥 **Critical hits:** a chance for double XP and gold.
+- ⚡ **Combos:** quests done within 15 minutes of each other stack an XP multiplier (up to +50%).
+- 💬 **Enemy taunts** that change as the fight goes on.
+- 📖 **Bestiary** of every monster type you've beaten.
+
+**Rewards**
+- 🪙 **Gold and shop:** health potions, streak shields, gear crates and epic crates. Sell spare gear for gold.
+- 🎁 **Daily chest:** gold, potions, a shield or gear.
+- 🧩 **Gear sets:** 3 matching pieces give +4% XP, 5 give +12%.
+- 🎨 **Appearance:** hair styles and colors, skin tones, plus capes and pets you unlock.
+
+**Progress**
+- 🏅 **35 achievements.**
+- 🌳 **Skill tree:** 1 point every 5 levels in Warrior, Scholar, Tank or Lucky.
+- 📊 **Hero stats:** Strength, Endurance and Discipline grow from what you actually do.
+
+**Daily variety**
+- ⭐ **Daily challenge:** a bonus quest each day.
+- 🔄 **Swap:** reroll 1 workout per day.
+- 😴 **Rest day:** pick a weekday. The enemy sleeps and one light activity keeps your streak.
+- 📅 **Calendar, weekly chart and lifetime totals.**
+
+**Practical**
+- 📲 Installable app that works offline.
+- 🔔 Daily reminder notification if the enemy isn't beaten by a time you choose.
+- 🔄 **Backup and sync** between devices with a sync code or a backup file (Journey → Backup & sync).
+- ⏱️ Built-in timer for timed workouts that completes the quest automatically.
 
 ## Project layout
 
 ```
 index.html      page shell
+manifest.json   app install info
+sw.js           offline support (service worker)
+icons/          app icons
 css/style.css   styles
-js/data.js      difficulties, workouts, enemies, gear tables
+js/data.js      difficulties, workouts, enemies, gear, shop, achievements, cosmetics
 js/game.js      game rules and saving (no DOM code)
-js/art.js       pixel-style SVG hero and enemies
+js/art.js       pixel-style SVG hero, pets and enemies
+js/sound.js     retro sound effects (Web Audio, no files)
 js/ui.js        rendering and interaction
 ```

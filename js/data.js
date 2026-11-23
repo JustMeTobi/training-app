@@ -30,20 +30,20 @@ const DIFFICULTIES = {
 
 /* Workout pool. base = amount at level 1 on Beginner. */
 const WORKOUTS = [
-  { id: 'pushups',   name: 'Push-ups',          base: 8,  unit: 'reps',        xp: 25, icon: '💪' },
-  { id: 'squats',    name: 'Squats',            base: 12, unit: 'reps',        xp: 25, icon: '🦵' },
-  { id: 'situps',    name: 'Sit-ups',           base: 12, unit: 'reps',        xp: 20, icon: '🔄' },
-  { id: 'plank',     name: 'Plank',             base: 30, unit: 'sec',         xp: 20, icon: '🧱' },
-  { id: 'lunges',    name: 'Lunges',            base: 8,  unit: 'reps / leg',  xp: 25, icon: '🚶' },
-  { id: 'jacks',     name: 'Jumping jacks',     base: 25, unit: 'reps',        xp: 20, icon: '⭐' },
-  { id: 'burpees',   name: 'Burpees',           base: 6,  unit: 'reps',        xp: 35, icon: '💥' },
-  { id: 'climbers',  name: 'Mountain climbers', base: 20, unit: 'reps',        xp: 25, icon: '⛰️' },
-  { id: 'bridges',   name: 'Glute bridges',     base: 12, unit: 'reps',        xp: 20, icon: '🌉' },
-  { id: 'wallsit',   name: 'Wall sit',          base: 30, unit: 'sec',         xp: 25, icon: '🪑' },
-  { id: 'walk',      name: 'Walk or run',       base: 15, unit: 'min',         xp: 35, icon: '👟', growth: 0.5 },
-  { id: 'stretch',   name: 'Stretching',        base: 5,  unit: 'min',         xp: 15, icon: '🧘', growth: 0.5 },
-  { id: 'superman',  name: 'Superman hold',     base: 20, unit: 'sec',         xp: 20, icon: '🦸' },
-  { id: 'calves',    name: 'Calf raises',       base: 15, unit: 'reps',        xp: 15, icon: '🦶' },
+  { id: 'pushups', attr: 'str',   name: 'Push-ups',          base: 8,  unit: 'reps',        xp: 25, icon: '💪' },
+  { id: 'squats', attr: 'str',    name: 'Squats',            base: 12, unit: 'reps',        xp: 25, icon: '🦵' },
+  { id: 'situps', attr: 'str',    name: 'Sit-ups',           base: 12, unit: 'reps',        xp: 20, icon: '🔄' },
+  { id: 'plank', attr: 'end',     name: 'Plank',             base: 30, unit: 'sec',         xp: 20, icon: '🧱' },
+  { id: 'lunges', attr: 'str',    name: 'Lunges',            base: 8,  unit: 'reps / leg',  xp: 25, icon: '🚶' },
+  { id: 'jacks', attr: 'end',     name: 'Jumping jacks',     base: 25, unit: 'reps',        xp: 20, icon: '⭐' },
+  { id: 'burpees', attr: 'end',   name: 'Burpees',           base: 6,  unit: 'reps',        xp: 35, icon: '💥' },
+  { id: 'climbers', attr: 'end',  name: 'Mountain climbers', base: 20, unit: 'reps',        xp: 25, icon: '⛰️' },
+  { id: 'bridges', attr: 'str',   name: 'Glute bridges',     base: 12, unit: 'reps',        xp: 20, icon: '🌉' },
+  { id: 'wallsit', attr: 'end',   name: 'Wall sit',          base: 30, unit: 'sec',         xp: 25, icon: '🪑' },
+  { id: 'walk', attr: 'end',      name: 'Walk or run',       base: 15, unit: 'min',         xp: 35, icon: '👟', growth: 0.5 },
+  { id: 'stretch', attr: 'end',   name: 'Stretching',        base: 5,  unit: 'min',         xp: 15, icon: '🧘', growth: 0.5 },
+  { id: 'superman', attr: 'str',  name: 'Superman hold',     base: 20, unit: 'sec',         xp: 20, icon: '🦸' },
+  { id: 'calves', attr: 'str',    name: 'Calf raises',       base: 15, unit: 'reps',        xp: 15, icon: '🦶' },
 ];
 
 const EFFORTS = {
@@ -103,4 +103,114 @@ const RANKS = [
   { level: 20, title: 'Hero' },
   { level: 30, title: 'Legend' },
   { level: 40, title: 'Mythic' },
+];
+
+/* ---------- v2: engagement features ---------- */
+
+const ATTRS = {
+  str: { label: 'Strength',   icon: '💪', color: '#ef4444', blurb: 'Grows from strength workouts' },
+  end: { label: 'Endurance',  icon: '🫀', color: '#22c55e', blurb: 'Grows from cardio and holds' },
+  dis: { label: 'Discipline', icon: '🧠', color: '#60a5fa', blurb: 'Grows from daily tasks' },
+};
+
+const SKILLS = {
+  warrior: { label: 'Warrior', icon: '⚔️', max: 5, desc: '+5% XP from workouts per point' },
+  scholar: { label: 'Scholar', icon: '📚', max: 5, desc: '+5% XP from tasks per point' },
+  tank:    { label: 'Tank',    icon: '🛡️', max: 5, desc: '+10 max HP per point' },
+  lucky:   { label: 'Lucky',   icon: '🍀', max: 5, desc: '+3% crit chance and better loot per point' },
+};
+
+const SHOP = [
+  { id: 'potion', name: 'Health potion', icon: '🧪', desc: 'Restores 40% of your HP.', price: () => 50 },
+  { id: 'shield', name: 'Streak shield', icon: '🛡️', desc: 'Saves your streak once if you lose a day. Used automatically. Max 3.', price: () => 150, max: 3 },
+  { id: 'crate',  name: 'Gear crate',    icon: '📦', desc: 'A random piece of gear for your level.', price: (lvl) => 120 + lvl * 10 },
+  { id: 'epic',   name: 'Epic crate',    icon: '💎', desc: 'Guaranteed Epic or Legendary gear.', price: (lvl) => 450 + lvl * 20 },
+];
+
+const CHALLENGES = [
+  { title: 'Plank for 2 minutes (breaks allowed)', kind: 'workout', icon: '🧱' },
+  { title: 'Walk 10,000 steps', kind: 'workout', icon: '👣' },
+  { title: '100 push-ups spread over the day', kind: 'workout', icon: '💪' },
+  { title: '50 squats in a row', kind: 'workout', icon: '🦵' },
+  { title: 'Take the stairs all day', kind: 'workout', icon: '🪜' },
+  { title: 'Stretch for 15 minutes', kind: 'workout', icon: '🧘' },
+  { title: '5 minutes of jumping rope or jacks', kind: 'workout', icon: '⭐' },
+  { title: 'Take a cold shower', kind: 'task', icon: '🚿' },
+  { title: 'No sugar today', kind: 'task', icon: '🍬' },
+  { title: 'Only drink water today', kind: 'task', icon: '💧' },
+  { title: 'Meditate for 10 minutes', kind: 'task', icon: '🧘' },
+  { title: 'No social media until 18:00', kind: 'task', icon: '📵' },
+  { title: 'Cook a healthy meal', kind: 'task', icon: '🥗' },
+  { title: 'Go to bed before 23:00', kind: 'task', icon: '🛌' },
+  { title: 'Write down 3 things you are grateful for', kind: 'task', icon: '📝' },
+  { title: 'Spend 20 minutes outside', kind: 'task', icon: '🌳' },
+];
+
+const BOSS_TITLES = ['Warlord', 'Overlord', 'Tyrant', 'Dread King', 'Destroyer', 'Ancient One'];
+
+const TAUNTS = {
+  fresh:    ["You'll never finish those squats…", 'Back to bed, little hero.', "I've already won. You're still in pajamas.", 'Workouts? Ha! Not today.', "Go on, scroll your phone. I'll wait."],
+  hurt:     ['Lucky hit! That won\'t happen again.', 'Is that all you\'ve got?', "Okay, that one stung. Barely.", 'Hmph. Keep dreaming.'],
+  almost:   ['N-no, not the plank!', 'Wait, wait! Let\'s talk about this!', "I'm feeling a bit… wobbly.", 'Please, no more push-ups!'],
+  beaten:   ['You win this time…', 'I\'ll be back tomorrow. Stronger!', 'Ugh… so many reps…', '*faints dramatically*'],
+  sleeping: ['Zzz… rest day… zzz…', '*snores loudly*', 'Zzz… do a little stretch… zzz…'],
+};
+
+const LOOKS = {
+  hairStyles: ['Short', 'Spiky', 'Long', 'Mohawk', 'Ponytail', 'Bald'],
+  hairColors: ['#5b3a1e', '#1f1f1f', '#e8c15a', '#b4441e', '#e5e7eb', '#3b82f6', '#ec4899', '#22c55e'],
+  skins: ['#f2c29b', '#e0a87a', '#c68642', '#8d5524', '#5c3a1e'],
+  capes: [
+    { id: 'red',     name: 'Red Cape',     color: '#dc2626', req: { level: 5 } },
+    { id: 'emerald', name: 'Emerald Cape', color: '#059669', req: { ach: 'streak_7' } },
+    { id: 'royal',   name: 'Royal Cape',   color: '#2563eb', req: { level: 10 } },
+    { id: 'shadow',  name: 'Shadow Cape',  color: '#4c1d95', req: { ach: 'boss_1' } },
+    { id: 'gold',    name: 'Golden Cape',  color: '#d97706', req: { level: 20 } },
+  ],
+  pets: [
+    { id: 'dog',    name: 'Puppy',       req: { level: 3 } },
+    { id: 'slime',  name: 'Pet Slime',   req: { ach: 'enemies_10' } },
+    { id: 'cat',    name: 'Cat',         req: { ach: 'streak_7' } },
+    { id: 'owl',    name: 'Owl',         req: { ach: 'tasks_100' } },
+    { id: 'dragon', name: 'Baby Dragon', req: { level: 25 } },
+  ],
+};
+
+/* Achievements. test(s, ctx) runs against the save; ctx = { hour, perfect, combo } */
+const ACHIEVEMENTS = [
+  { id: 'first_quest', icon: '👣', name: 'First Step',       desc: 'Complete your first quest',          test: s => s.stats.workouts + s.stats.tasks >= 1 },
+  { id: 'first_blood', icon: '🗡️', name: 'First Blood',      desc: 'Defeat your first enemy',            test: s => s.stats.enemies >= 1 },
+  { id: 'enemies_10',  icon: '🏹', name: 'Monster Hunter',   desc: 'Defeat 10 enemies',                  test: s => s.stats.enemies >= 10 },
+  { id: 'enemies_50',  icon: '☠️', name: 'Slayer',           desc: 'Defeat 50 enemies',                  test: s => s.stats.enemies >= 50 },
+  { id: 'boss_1',      icon: '👑', name: 'Boss Slayer',      desc: 'Defeat a weekly boss',               test: s => s.stats.bosses >= 1 },
+  { id: 'boss_5',      icon: '🐲', name: "Overlord's Bane",  desc: 'Defeat 5 weekly bosses',             test: s => s.stats.bosses >= 5 },
+  { id: 'streak_3',    icon: '🔥', name: 'On a Roll',        desc: 'Reach a 3-day streak',               test: s => s.hero.bestStreak >= 3 },
+  { id: 'streak_7',    icon: '⛓️', name: 'Iron Will',        desc: 'Reach a 7-day streak',               test: s => s.hero.bestStreak >= 7 },
+  { id: 'streak_30',   icon: '🌋', name: 'Unstoppable',      desc: 'Reach a 30-day streak',              test: s => s.hero.bestStreak >= 30 },
+  { id: 'workouts_10', icon: '🏋️', name: 'Getting Started',  desc: 'Complete 10 workouts',               test: s => s.stats.workouts >= 10 },
+  { id: 'workouts_100',icon: '💯', name: 'Centurion',        desc: 'Complete 100 workouts',              test: s => s.stats.workouts >= 100 },
+  { id: 'workouts_500',icon: '🗿', name: 'Titan',            desc: 'Complete 500 workouts',              test: s => s.stats.workouts >= 500 },
+  { id: 'tasks_10',    icon: '📋', name: 'Organized',        desc: 'Complete 10 tasks',                  test: s => s.stats.tasks >= 10 },
+  { id: 'tasks_100',   icon: '🦉', name: 'Taskmaster',       desc: 'Complete 100 tasks',                 test: s => s.stats.tasks >= 100 },
+  { id: 'level_5',     icon: '⭐', name: 'Adventurer',       desc: 'Reach level 5',                      test: (s, c) => c.level >= 5 },
+  { id: 'level_10',    icon: '🌟', name: 'Knighted',         desc: 'Reach level 10',                     test: (s, c) => c.level >= 10 },
+  { id: 'level_20',    icon: '💫', name: 'Hero of Legend',   desc: 'Reach level 20',                     test: (s, c) => c.level >= 20 },
+  { id: 'level_30',    icon: '🌠', name: 'Mythic',           desc: 'Reach level 30',                     test: (s, c) => c.level >= 30 },
+  { id: 'crit_1',      icon: '💥', name: 'Critical!',        desc: 'Land a critical hit',                test: s => s.stats.crits >= 1 },
+  { id: 'crit_25',     icon: '🎯', name: 'Sharp Eye',        desc: 'Land 25 critical hits',              test: s => s.stats.crits >= 25 },
+  { id: 'combo_3',     icon: '⚡', name: 'Combo Starter',    desc: 'Reach a ×3 combo',                   test: s => s.stats.maxCombo >= 3 },
+  { id: 'combo_6',     icon: '🌩️', name: 'Combo King',       desc: 'Reach a ×6 combo',                   test: s => s.stats.maxCombo >= 6 },
+  { id: 'early_bird',  icon: '🐦', name: 'Early Bird',       desc: 'Beat the enemy before noon',         test: s => s.stats.earlyWins >= 1 },
+  { id: 'night_owl',   icon: '🌙', name: 'Night Owl',        desc: 'Complete a quest after 22:00',       test: (s, c) => c.hour >= 22 },
+  { id: 'perfect',     icon: '✨', name: 'Perfectionist',    desc: 'Complete every quest in a day',      test: (s, c) => c.perfect },
+  { id: 'legendary',   icon: '🏆', name: 'Legendary!',       desc: 'Own a Legendary item',               test: s => s.inventory.some(i => i.rarity === 'legendary') },
+  { id: 'full_set',    icon: '🧥', name: 'Fashionista',      desc: 'Wear a full 5-piece gear set',       test: (s, c) => c.setCount >= 5 },
+  { id: 'gold_1000',   icon: '💰', name: 'Moneybags',        desc: 'Earn 1,000 gold in total',           test: s => s.stats.goldEarned >= 1000 },
+  { id: 'chests_10',   icon: '🗝️', name: 'Treasure Hunter',  desc: 'Open 10 daily chests',               test: s => s.stats.chests >= 10 },
+  { id: 'challenge_1', icon: '🎖️', name: 'Challenger',       desc: 'Complete a daily challenge',         test: s => s.stats.challenges >= 1 },
+  { id: 'challenge_10',icon: '🥇', name: 'Daredevil',        desc: 'Complete 10 daily challenges',       test: s => s.stats.challenges >= 10 },
+  { id: 'timer_10',    icon: '⏱️', name: 'Timekeeper',       desc: 'Finish 10 workouts with the timer',  test: s => s.stats.timers >= 10 },
+  { id: 'bestiary_5',  icon: '📖', name: 'Monster Expert',   desc: 'Defeat 5 different monster types',   test: s => Object.keys(s.bestiary).length >= 5 },
+  { id: 'pushups_1000',icon: '🦾', name: 'Push-up Pro',      desc: 'Do 1,000 push-ups in total',         test: s => (s.stats.reps.pushups || 0) >= 1000 },
+  { id: 'potion_1',    icon: '🧪', name: 'Quick Fix',        desc: 'Drink a health potion',              test: s => s.stats.potions >= 1 },
 ];

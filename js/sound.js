@@ -81,11 +81,33 @@ const Sound = (() => {
       tone(180, 0, 0.35, { type: 'sawtooth', vol: 0.12, slide: -120 });
     },
     click() { tone(880, 0, 0.04, { type: 'triangle', vol: 0.06 }); },
+    crit() {
+      noise(0, 0.18, 0.22);
+      tone(160, 0, 0.2, { type: 'sawtooth', vol: 0.12, slide: -100 });
+      [1319, 1760, 2093].forEach((f, i) => tone(f, 0.08 + i * 0.05, 0.14, { vol: 0.08 }));
+    },
+    coin() { tone(1319, 0, 0.06, { vol: 0.07 }); tone(1976, 0.05, 0.18, { vol: 0.07 }); },
+    combo(n = 2) { tone(440 * Math.pow(1.12, Math.min(n, 8)), 0, 0.1, { type: 'triangle', vol: 0.09 }); },
+    bossHit() { noise(0, 0.12, 0.14); tone(90, 0, 0.25, { type: 'sawtooth', vol: 0.11, slide: -40 }); },
+    chest() {
+      tone(200, 0, 0.12, { type: 'square', vol: 0.07, slide: 120 });
+      [784, 988, 1175, 1568, 1976].forEach((f, i) => tone(f, 0.15 + i * 0.06, 0.16, { type: 'triangle', vol: 0.1 }));
+    },
+    achievement() {
+      [659, 880, 1109, 1319].forEach((f, i) => tone(f, i * 0.08, 0.16, { vol: 0.09 }));
+      tone(1760, 0.34, 0.4, { type: 'triangle', vol: 0.09 });
+    },
+    buy() { tone(1047, 0, 0.06, { vol: 0.08 }); tone(1568, 0.06, 0.06, { vol: 0.08 }); tone(2093, 0.12, 0.2, { type: 'triangle', vol: 0.08 }); },
+    potion() { for (let i = 0; i < 5; i++) tone(400 + i * 120, i * 0.05, 0.08, { type: 'sine', vol: 0.1, slide: 200 }); },
+    swap() { tone(523, 0, 0.07, { type: 'triangle', vol: 0.09 }); tone(784, 0.07, 0.1, { type: 'triangle', vol: 0.09 }); },
+    tick() { tone(1200, 0, 0.03, { type: 'square', vol: 0.04 }); },
+    timerDone() { [0, 0.18, 0.36].forEach(t => tone(1568, t, 0.12, { vol: 0.1 })); tone(2093, 0.54, 0.35, { vol: 0.1 }); },
+    error() { tone(200, 0, 0.12, { type: 'square', vol: 0.07 }); tone(150, 0.1, 0.16, { type: 'square', vol: 0.07 }); },
   };
 
-  function play(name) {
+  function play(name, arg) {
     if (muted || !sounds[name]) return;
-    try { sounds[name](); } catch { /* audio unavailable */ }
+    try { sounds[name](arg); } catch { /* audio unavailable */ }
   }
   function setMuted(m) {
     muted = !!m;
