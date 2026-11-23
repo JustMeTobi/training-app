@@ -526,3 +526,31 @@ body.shake { animation: shake .4s ease-out; }
   .side { display: contents; }
   #hero-card { order: 1; } #battle-card { order: 2; } .content { order: 3; } #boss-card { order: 4; }
 }
+
+/* ================= v3: gear effects ================= */
+.fx { filter: drop-shadow(0 0 1.5px var(--fx)) drop-shadow(0 0 3px var(--fx)); animation: fxPulse 2.2s ease-in-out infinite; }
+.fx-unique { animation-duration: 1.4s; }
+@keyframes fxPulse { 50% { filter: drop-shadow(0 0 2.5px var(--fx)) drop-shadow(0 0 6px var(--fx)); } }
+.spark { animation: spark 1.6s ease-in-out infinite; opacity: 0; }
+@keyframes spark { 0% { opacity: 0; transform: translateY(2px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-5px); } }
+.item-svg { width: 100%; height: 100%; display: block; }
+.item-art { width: 52px; height: 52px; background: radial-gradient(circle, #2e2860 0%, #0e0c22 75%); border-radius: 10px; padding: 4px; align-self: start; }
+.item { align-items: start; }
+.item-actions { flex-wrap: wrap; justify-content: flex-end; max-width: 150px; }
+.slot-art { width: 44px; height: 44px; margin: 0 auto; }
+.loot-art { width: 96px; height: 96px; margin: 0 auto .3rem; }
+.fx-list { list-style: none; margin: .35rem 0 0; padding: 0; display: grid; gap: .15rem; font-size: .78rem; text-align: left; }
+.fx-list li { color: var(--c); font-weight: 700; }
+.fx-list li.unique { background: color-mix(in srgb, var(--c) 15%, transparent); border: 1px solid var(--c); border-radius: 8px; padding: .25rem .45rem; color: #fff; }
+.fx-list li.unique b { color: var(--c); }
+.loot .fx-list { margin-top: .5rem; }
+.powers { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .4rem; }
+.power { display: grid; grid-template-columns: auto 1fr; column-gap: .5rem; align-items: center; background: #0e0c22; border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 10px; padding: .45rem .6rem; }
+.power span { grid-row: span 2; font-size: 1.2rem; }
+.power b { font-size: .85rem; color: var(--c); }
+.power small { font-size: .75rem; color: var(--muted); }
+.power.unique { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, #0e0c22); }
+.chip-unique { border-color: var(--c); color: var(--c); }
+.float-text.dmg { color: #fca5a5; font-size: 1rem; }
+.float-text.dmg.crit { font-size: 1.4rem; color: #f87171; }
+@media (max-width: 480px) { .item { grid-template-columns: auto 1fr; } .item-actions { grid-column: 1 / -1; max-width: none; } }

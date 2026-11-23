@@ -213,4 +213,39 @@ const ACHIEVEMENTS = [
   { id: 'bestiary_5',  icon: '📖', name: 'Monster Expert',   desc: 'Defeat 5 different monster types',   test: s => Object.keys(s.bestiary).length >= 5 },
   { id: 'pushups_1000',icon: '🦾', name: 'Push-up Pro',      desc: 'Do 1,000 push-ups in total',         test: s => (s.stats.reps.pushups || 0) >= 1000 },
   { id: 'potion_1',    icon: '🧪', name: 'Quick Fix',        desc: 'Drink a health potion',              test: s => s.stats.potions >= 1 },
+  { id: 'reforge_1',   icon: '🔨', name: 'Blacksmith',       desc: 'Reforge a piece of gear',            test: s => (s.stats.reforges || 0) >= 1 },
+  { id: 'unique_1',    icon: '🌟', name: 'One of a Kind',    desc: 'Equip gear with a unique power',     test: (s, c) => c.uniques >= 1 },
+  { id: 'power_50',    icon: '🔥', name: 'Heavy Hitter',     desc: 'Reach +50% Power from gear',         test: (s, c) => c.power >= 50 },
 ];
+
+/* ---------- v3: gear effects ---------- */
+/* Random bonus effects on rare+ gear. min/max scale up with the item's material tier. */
+const EFFECTS = {
+  power:  { label: 'Power',      icon: '⚔️', unit: '%',   min: 6, max: 14, perTier: 2,   color: '#ef4444', suffix: 'of Fury',     desc: v => `+${v}% damage to bosses` },
+  crit:   { label: 'Precision',  icon: '💥', unit: '%',   min: 2, max: 5,  perTier: 0.5, color: '#facc15', suffix: 'of Precision', desc: v => `+${v}% critical hit chance` },
+  gold:   { label: 'Fortune',    icon: '🪙', unit: '%',   min: 8, max: 18, perTier: 2,   color: '#f59e0b', suffix: 'of Greed',     desc: v => `+${v}% gold from everything` },
+  hp:     { label: 'Vitality',   icon: '❤️', unit: '',    min: 6, max: 14, perTier: 2,   color: '#f43f5e', suffix: 'of the Bear',  desc: v => `+${v} max HP` },
+  armor:  { label: 'Armor',      icon: '🛡️', unit: '%',   min: 4, max: 8,  perTier: 1,   color: '#94a3b8', suffix: 'of the Wall',  desc: v => `−${v}% damage taken at night` },
+  luck:   { label: 'Luck',       icon: '🍀', unit: '',    min: 3, max: 7,  perTier: 1,   color: '#22c55e', suffix: 'of Clovers',   desc: v => `+${v} luck (rarer loot)` },
+  regen:  { label: 'Regen',      icon: '💚', unit: '',    min: 1, max: 3,  perTier: 0.3, color: '#4ade80', suffix: 'of Mending',   desc: v => `Heal ${v} HP per quest` },
+  combo:  { label: 'Swiftness',  icon: '⚡', unit: ' min', min: 2, max: 5,  perTier: 0.5, color: '#a855f7', suffix: 'of the Wind',  desc: v => `Combo window +${v} min` },
+};
+/* Which effects each slot tends to roll (more entries = more likely). */
+const SLOT_EFFECTS = {
+  weapon: ['power', 'power', 'power', 'crit', 'crit', 'gold', 'regen'],
+  helmet: ['crit', 'luck', 'luck', 'hp', 'gold', 'armor'],
+  armor:  ['hp', 'hp', 'armor', 'armor', 'regen', 'gold'],
+  shield: ['armor', 'armor', 'armor', 'hp', 'hp', 'power'],
+  boots:  ['combo', 'combo', 'combo', 'regen', 'luck', 'gold'],
+};
+const EFFECT_COUNT = { common: 0, rare: 1, epic: 2, legendary: 2 };
+
+/* One unique power on every Legendary item. */
+const UNIQUES = {
+  executioner: { name: 'Executioner', icon: '🪓', color: '#dc2626', desc: 'Critical hits deal ×3 instead of ×2' },
+  phoenix:     { name: 'Phoenix',     icon: '🔥', color: '#fb923c', desc: 'Once per week, survive a knockout with 1 HP' },
+  midas:       { name: 'Midas',       icon: '👑', color: '#fbbf24', desc: 'Double gold from enemies and chests' },
+  secondwind:  { name: 'Second Wind', icon: '🌬️', color: '#38bdf8', desc: 'Your first quest each day gives ×1.5 XP and double boss damage' },
+  timelord:    { name: 'Time Lord',   icon: '⏳', color: '#c084fc', desc: 'Combo window 30 min and combo bonus up to +80%' },
+  vampire:     { name: 'Vampiric',    icon: '🦇', color: '#be123c', desc: 'Critical hits heal 15 HP' },
+};

@@ -1,5 +1,5 @@
 /* QuestFit service worker: caches the app so it works offline. Bump VERSION when files change. */
-const VERSION = 'questfit-v2';
+const VERSION = 'questfit-v3';
 const FILES = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/data.js', './js/game.js', './js/art.js', './js/sound.js', './js/ui.js',

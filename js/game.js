@@ -10,7 +10,6 @@ const Game = (() => {
   const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const COMBO_WINDOW = 15 * 60 * 1000;
 
   function todayKey(d = new Date()) {
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -43,7 +42,7 @@ const Game = (() => {
   const level = () => levelInfo(state.hero.totalXP).level;
   function rankFor(lv) { let r = RANKS[0]; for (const x of RANKS) if (lv >= x.level) r = x; return r; }
   function nextRank(lv) { return RANKS.find(r => r.level > lv) || null; }
-  function maxHP(lv) { return 100 + (lv - 1) * 5 + (state ? state.skills.tank * 10 : 0); }
+  function maxHP(lv) { return 100 + (lv - 1) * 5 + (state ? state.skills.tank * 10 + gearStats().hp : 0); }
   const heroMaxHP = () => maxHP(level());
 
   function requirements(lv, diffId) {
@@ -78,7 +77,7 @@ const Game = (() => {
     state.hero.hp = Math.min(state.hero.hp, heroMaxHP());
     save();
   }
-  const critChance = () => 0.06 + state.skills.lucky * 0.03;
+  const critChance = () => 0.06 + state.skills.lucky * 0.03 + gearStats().crit / 100;
 
   /* ---------- gear ---------- */
   function equippedItem(slot) {
@@ -98,8 +97,46 @@ const Game = (() => {
     for (const slot of Object.keys(SLOTS)) { const it = equippedItem(slot); if (it) total += it.bonus; }
     return total + setInfo().bonus;
   }
+  /* Sum of all effects on equipped gear. */
+  function gearStats() {
+    const out = { uniques: new Set() };
+    for (const k of Object.keys(EFFECTS)) out[k] = 0;
+    if (!state) return out;
+    for (const slot of Object.keys(SLOTS)) {
+      const it = equippedItem(slot);
+      if (!it) continue;
+      for (const e of it.effects || []) out[e.id] = (out[e.id] || 0) + e.value;
+      if (it.unique) out.uniques.add(it.unique);
+    }
+    out.armor = Math.min(60, out.armor);
+    return out;
+  }
+  function rollEffects(slot, rarity, tier) {
+    const n = EFFECT_COUNT[rarity] || 0;
+    const pool = SLOT_EFFECTS[slot].slice();
+    const out = [];
+    while (out.length < n && pool.length) {
+      const id = pick(pool);
+      for (let i = pool.length - 1; i >= 0; i--) if (pool[i] === id) pool.splice(i, 1);
+      const E = EFFECTS[id];
+      const bonus = rarity === 'legendary' ? 1.3 : rarity === 'epic' ? 1.15 : 1;
+      out.push({ id, value: Math.max(1, Math.round((rand(E.min, E.max) + tier * E.perTier) * bonus)) });
+    }
+    return out;
+  }
+  function itemName(it) {
+    const mat = MATERIALS[it.tier];
+    if (it.unique) return `${UNIQUES[it.unique].name} ${mat} ${it.base}`;
+    const suffix = it.effects && it.effects[0] ? ` ${EFFECTS[it.effects[0].id].suffix}` : '';
+    return `${mat} ${it.base}${suffix}`;
+  }
+  function baseOf(it) {
+    const words = it.name.split(' ');
+    return SLOTS[it.slot].bases.find(b => words.includes(b)) || SLOTS[it.slot].bases[0];
+  }
+
   function rollRarity(lv, diffId, min = 'common') {
-    const luck = lv * 0.6 + DIFFICULTIES[diffId].lootLuck + state.skills.lucky * 4;
+    const luck = lv * 0.6 + DIFFICULTIES[diffId].lootLuck + state.skills.lucky * 4 + gearStats().luck;
     const w = {
       common: Math.max(15, RARITIES.common.weight - luck * 1.5),
       rare: RARITIES.rare.weight + luck * 0.6,
@@ -117,7 +154,27 @@ const Game = (() => {
     const rarity = rollRarity(lv, diffId, minRarity);
     const tier = clamp(Math.floor((lv - 1) / 4) + rand(-1, 1) + RARITY_ORDER.indexOf(rarity) - 1, 0, MATERIALS.length - 1);
     const R = RARITIES[rarity];
-    return { id: uid(), slot, rarity, bonus: rand(R.min, R.max) + Math.floor(tier / 2), name: `${MATERIALS[tier]} ${pick(SLOTS[slot].bases)}`, tier, found: todayKey() };
+    const it = { id: uid(), slot, rarity, bonus: rand(R.min, R.max) + Math.floor(tier / 2), base: pick(SLOTS[slot].bases), tier, found: todayKey() };
+    it.effects = rollEffects(slot, rarity, tier);
+    if (rarity === 'legendary') it.unique = pick(Object.keys(UNIQUES));
+    it.name = itemName(it);
+    return it;
+  }
+  function reforgePrice(it) { return 60 + it.tier * 15 + RARITY_ORDER.indexOf(it.rarity) * 40; }
+  /* Re-roll an item's effects (and unique power) for gold. */
+  function reforge(itemId) {
+    const it = state.inventory.find(i => i.id === itemId);
+    if (!it || it.rarity === 'common') return { ok: false };
+    const price = reforgePrice(it);
+    if (state.hero.gold < price) return { ok: false, reason: 'gold' };
+    state.hero.gold -= price;
+    it.effects = rollEffects(it.slot, it.rarity, it.tier);
+    if (it.rarity === 'legendary') it.unique = pick(Object.keys(UNIQUES).filter(u => u !== it.unique));
+    it.name = itemName(it);
+    state.stats.reforges = (state.stats.reforges || 0) + 1;
+    state.hero.hp = Math.min(state.hero.hp, heroMaxHP());
+    save();
+    return { ok: true, item: it, events: checkAchievements() };
   }
   function giveItem(item) {
     state.inventory.push(item);
@@ -125,7 +182,7 @@ const Game = (() => {
     if (autoEquip) state.equipped[item.slot] = item.id;
     return autoEquip;
   }
-  function equip(itemId) { const it = state.inventory.find(i => i.id === itemId); if (it) { state.equipped[it.slot] = it.id; save(); } return checkAchievements(); }
+  function equip(itemId) { const it = state.inventory.find(i => i.id === itemId); if (it) { state.equipped[it.slot] = it.id; state.hero.hp = Math.min(state.hero.hp, heroMaxHP()); save(); } return checkAchievements(); }
   function discard(itemId) {
     const it = state.inventory.find(i => i.id === itemId);
     if (!it) return;
@@ -134,7 +191,7 @@ const Game = (() => {
     addGold(sellPrice(it), false);
     save();
   }
-  const sellPrice = (it) => 5 + RARITY_ORDER.indexOf(it.rarity) * 15 + it.tier * 3;
+  const sellPrice = (it) => 5 + RARITY_ORDER.indexOf(it.rarity) * 15 + it.tier * 3 + (it.effects || []).length * 5 + (it.unique ? 40 : 0);
 
   /* ---------- gold & shop ---------- */
   function addGold(n, earned = true) {
@@ -185,8 +242,8 @@ const Game = (() => {
     const lv = level(), diff = state.hero.difficulty;
     const req = requirements(lv, diff);
     const tier = clamp(topTier(lv, diff) + 1, 0, ENEMIES.length - 1);
-    const hits = Math.max(4, Math.round(daysLeftInWeek(key) * (req.workouts + req.tasks)));
-    return { week: weekKey(key), tier, name: `${ENEMIES[tier].name} ${pick(BOSS_TITLES)}`, maxHits: hits, hits, defeated: false, level: lv };
+    const hp = Math.max(4, Math.round(daysLeftInWeek(key) * (req.workouts + req.tasks))) * 100;
+    return { week: weekKey(key), tier, name: `${ENEMIES[tier].name} ${pick(BOSS_TITLES)}`, maxHp: hp, hp, defeated: false, level: lv };
   }
   function ensureBoss(key, report) {
     if (state.boss && state.boss.week === weekKey(key)) return;
@@ -258,9 +315,13 @@ const Game = (() => {
     const got = Math.min(w, day.req.workouts) + Math.min(t, day.req.tasks);
     return { workouts: w, tasks: t, pct: need ? got / need : 1, met: got >= need };
   }
-  function comboMult(c) { return 1 + Math.min(Math.max(c - 1, 0), 5) * 0.1; }
-  function comboActive() { return state.day.combo > 1 && Date.now() - state.day.lastAt < COMBO_WINDOW; }
-  function comboLeftMs() { return Math.max(0, COMBO_WINDOW - (Date.now() - state.day.lastAt)); }
+  function comboWindow() {
+    const gs = gearStats();
+    return ((gs.uniques.has('timelord') ? 30 : 15) + gs.combo) * 60 * 1000;
+  }
+  function comboMult(c) { return 1 + Math.min(Math.max(c - 1, 0), gearStats().uniques.has('timelord') ? 8 : 5) * 0.1; }
+  function comboActive() { return state.day.combo > 1 && Date.now() - state.day.lastAt < comboWindow(); }
+  function comboLeftMs() { return Math.max(0, comboWindow() - (Date.now() - state.day.lastAt)); }
 
   /* ---------- actions ---------- */
   function complete(key, { viaTimer = false } = {}) {
@@ -270,17 +331,24 @@ const Game = (() => {
     const lvBefore = level();
     const now = Date.now();
 
-    d.combo = now - d.lastAt < COMBO_WINDOW ? d.combo + 1 : 1;
+    d.combo = now - d.lastAt < comboWindow() ? d.combo + 1 : 1;
     d.lastAt = now;
     state.stats.maxCombo = Math.max(state.stats.maxCombo, d.combo);
+    const gs = gearStats();
+    const first = Object.keys(d.done).length === 0 && gs.uniques.has('secondwind');
     const crit = Math.random() < critChance();
+    const critMult = crit ? (gs.uniques.has('executioner') ? 3 : 2) : 1;
     const skill = q.kind === 'workout' ? state.skills.warrior : state.skills.scholar;
-    const mult = (1 + gearBonus() / 100 + skill * 0.05) * comboMult(d.combo) * (crit ? 2 : 1);
+    const mult = (1 + gearBonus() / 100 + skill * 0.05) * comboMult(d.combo) * critMult * (first ? 1.5 : 1);
     const xp = Math.round(q.xp * mult);
-    const gold = Math.round((q.gold || Math.max(2, q.xp / 4)) * (crit ? 2 : 1));
-    const bossDmg = state.boss && !state.boss.defeated ? (crit ? 2 : 1) : 0;
+    const gold = Math.round((q.gold || Math.max(2, q.xp / 4)) * critMult * (1 + gs.gold / 100));
+    const damage = Math.round(100 * (1 + gs.power / 100) * critMult * (first ? 2 : 1));
+    const bossDmg = state.boss && !state.boss.defeated ? Math.min(state.boss.hp, damage) : 0;
+    const hpBefore = state.hero.hp;
+    state.hero.hp = Math.min(heroMaxHP(), state.hero.hp + gs.regen + (crit && gs.uniques.has('vampire') ? 15 : 0));
+    const healed = state.hero.hp - hpBefore;
 
-    d.done[key] = { xp, gold, kind: q.kind, at: now, crit, attr: q.attr, exId: q.exId, amount: q.amount, bossDmg, timer: viaTimer, challenge: !!q.challenge };
+    d.done[key] = { xp, gold, kind: q.kind, at: now, crit, attr: q.attr, exId: q.exId, amount: q.amount, bossDmg, healed, timer: viaTimer, challenge: !!q.challenge };
     state.hero.totalXP += xp;
     addGold(gold);
     state.stats[q.kind === 'workout' ? 'workouts' : 'tasks']++;
@@ -289,18 +357,18 @@ const Game = (() => {
     if (crit) state.stats.crits++;
     if (viaTimer) state.stats.timers++;
     if (q.challenge) state.stats.challenges++;
-    events.push({ type: 'xp', amount: xp, gold, crit, combo: d.combo, kind: q.kind });
+    events.push({ type: 'xp', amount: xp, gold, crit, critMult, combo: d.combo, kind: q.kind, damage, healed, secondWind: first });
     if (q.challenge) events.push({ type: 'challenge', gold });
 
     if (bossDmg) {
-      state.boss.hits = Math.max(0, state.boss.hits - bossDmg);
+      state.boss.hp = Math.max(0, state.boss.hp - bossDmg);
       events.push({ type: 'bossHit', dmg: bossDmg });
-      if (state.boss.hits === 0) {
+      if (state.boss.hp === 0) {
         state.boss.defeated = true;
         state.stats.bosses++;
         const item = makeItem(level(), state.hero.difficulty, { minRarity: 'epic' });
         const autoEquip = giveItem(item);
-        const g = 200 + level() * 15;
+        const g = Math.round((200 + level() * 15) * (1 + gs.gold / 100) * (gs.uniques.has('midas') ? 2 : 1));
         addGold(g);
         events.push({ type: 'bossDefeat', boss: state.boss, item, autoEquip, gold: g });
       }
@@ -334,7 +402,7 @@ const Game = (() => {
           state.bestiary[d.enemy.tier] = (state.bestiary[d.enemy.tier] || 0) + 1;
           const item = makeItem(d.level, state.hero.difficulty);
           const autoEquip = giveItem(item);
-          const g = 25 + d.level * 3;
+          const g = Math.round((25 + d.level * 3) * (1 + gs.gold / 100) * (gs.uniques.has('midas') ? 2 : 1));
           addGold(g);
           events.push({ type: 'defeat', enemy: d.enemy, item, autoEquip, gold: g });
         }
@@ -366,7 +434,8 @@ const Game = (() => {
     if (e.crit) state.stats.crits = Math.max(0, state.stats.crits - 1);
     if (e.timer) state.stats.timers = Math.max(0, state.stats.timers - 1);
     if (e.challenge) state.stats.challenges = Math.max(0, state.stats.challenges - 1);
-    if (e.bossDmg && state.boss && !state.boss.defeated) state.boss.hits = Math.min(state.boss.maxHits, state.boss.hits + e.bossDmg);
+    if (e.bossDmg && state.boss && !state.boss.defeated) state.boss.hp = Math.min(state.boss.maxHp, state.boss.hp + e.bossDmg);
+    if (e.healed) state.hero.hp = Math.max(1, state.hero.hp - e.healed);
     if (!progress().met) {
       if (state.day.bonusXP) { state.hero.totalXP = Math.max(0, state.hero.totalXP - state.day.bonusXP); state.day.bonusXP = 0; }
       if (state.day.streakCounted) { state.day.streakCounted = false; state.hero.streak = Math.max(0, state.hero.streak - 1); }
@@ -401,7 +470,7 @@ const Game = (() => {
     if (r < 0.12) { const item = makeItem(lv, state.hero.difficulty); res = { type: 'item', item, autoEquip: giveItem(item) }; }
     else if (r < 0.32) { state.consumables.potion++; res = { type: 'potion' }; }
     else if (r < 0.37) { state.consumables.shield = Math.min(3, state.consumables.shield + 1); res = { type: 'shield' }; }
-    else { const g = rand(15, 40) + lv * 2; addGold(g); res = { type: 'gold', gold: g }; }
+    else { const gs = gearStats(); const g = Math.round((rand(15, 40) + lv * 2) * (1 + gs.gold / 100) * (gs.uniques.has('midas') ? 2 : 1)); addGold(g); res = { type: 'gold', gold: g }; }
     res.events = checkAchievements();
     save();
     return res;
@@ -424,7 +493,8 @@ const Game = (() => {
 
   /* ---------- achievements ---------- */
   function checkAchievements(extra = {}) {
-    const ctx = { level: level(), hour: -1, perfect: false, setCount: setInfo().count, ...extra };
+    const gs = gearStats();
+    const ctx = { level: level(), hour: -1, perfect: false, setCount: setInfo().count, uniques: gs.uniques.size, power: gs.power, ...extra };
     const out = [];
     for (const a of ACHIEVEMENTS) {
       if (state.achievements[a.id]) continue;
@@ -452,9 +522,17 @@ const Game = (() => {
   }
 
   /* ---------- day settlement ---------- */
+  const armorReduce = (dmg) => Math.max(1, Math.round(dmg * (1 - gearStats().armor / 100)));
   function damageHero(amount, report) {
+    amount = armorReduce(amount);
     state.hero.hp -= amount;
     report.damage += amount;
+    if (state.hero.hp <= 0 && gearStats().uniques.has('phoenix') && state.phoenixWeek !== weekKey()) {
+      state.phoenixWeek = weekKey();
+      state.hero.hp = 1;
+      report.phoenix = true;
+      return amount;
+    }
     if (state.hero.hp <= 0) {
       const info = levelInfo(state.hero.totalXP);
       const lost = Math.floor(info.into / 2);
@@ -470,6 +548,7 @@ const Game = (() => {
         report.stolen.push(it.name);
       }
     }
+    return amount;
   }
   function loseStreak(report) {
     if (state.hero.streak > 0 && state.consumables.shield > 0) {
@@ -493,16 +572,15 @@ const Game = (() => {
       report.days.push({ key: d.key, met: false, enemy: d.enemy.name, dmg: 0, rest: true });
     } else {
       loseStreak(report);
-      const dmg = Math.max(1, Math.round(d.enemy.attack * (1 - p.pct)));
-      damageHero(dmg, report);
+      const dmg = damageHero(Math.max(1, Math.round(d.enemy.attack * (1 - p.pct))), report);
       report.days.push({ key: d.key, met: false, enemy: d.enemy.name, dmg });
     }
     const missed = Math.min(3, daysBetween(d.key, today) - 1);
     for (let i = 0; i < missed; i++) {
       const e = makeEnemy(level(), state.hero.difficulty);
       loseStreak(report);
-      damageHero(e.attack, report);
-      report.days.push({ key: 'skipped', met: false, enemy: e.name, dmg: e.attack });
+      const dmg = damageHero(e.attack, report);
+      report.days.push({ key: 'skipped', met: false, enemy: e.name, dmg });
     }
     state.history = state.history.slice(-400);
     return report;
@@ -528,9 +606,10 @@ const Game = (() => {
   function stakes() {
     const p = progress();
     const info = levelInfo(state.hero.totalXP);
-    const dmg = p.met || state.day.rest ? 0 : Math.max(1, Math.round(state.day.enemy.attack * (1 - p.pct)));
+    const dmg = p.met || state.day.rest ? 0 : armorReduce(Math.max(1, Math.round(state.day.enemy.attack * (1 - p.pct))));
     const hpAfter = state.hero.hp - dmg;
-    return { dmg, hpAfter, knockout: hpAfter <= 0, xpLoss: Math.floor(info.into / 2), met: p.met, shield: state.consumables.shield > 0 };
+    const phoenix = gearStats().uniques.has('phoenix') && state.phoenixWeek !== weekKey();
+    return { dmg, hpAfter, phoenix, knockout: hpAfter <= 0 && !phoenix, xpLoss: Math.floor(info.into / 2), met: p.met, shield: state.consumables.shield > 0 };
   }
 
   /* ---------- motivation & settings ---------- */
@@ -559,6 +638,15 @@ const Game = (() => {
     s.look = { hair: 0, hairColor: 0, skin: 0, cape: null, pet: null, ...(s.look || {}) };
     s.settings = { restDay: null, reminders: false, reminderTime: '18:00', lastReminded: null, ...(s.settings || {}) };
     s.boss ??= null;
+    if (s.boss && s.boss.hits != null) { s.boss.maxHp = s.boss.maxHits * 100; s.boss.hp = s.boss.hits * 100; delete s.boss.hits; delete s.boss.maxHits; }
+    for (const it of s.inventory) {
+      it.base ??= baseOf(it);
+      if (!it.effects) {
+        it.effects = rollEffects(it.slot, it.rarity, it.tier);
+        if (it.rarity === 'legendary') it.unique = pick(Object.keys(UNIQUES));
+        if (it.effects.length) it.name = itemName(it);
+      }
+    }
     s.motivation = { ...DEFAULT_MOTIVATION, ...(s.motivation || {}) };
     if (s.day) {
       const d = s.day;
@@ -582,7 +670,7 @@ const Game = (() => {
   }
   function start(name, difficulty) {
     state = freshState(String(name || 'Hero').trim().slice(0, 20) || 'Hero', DIFFICULTIES[difficulty] ? difficulty : 'beginner');
-    const sword = { id: uid(), slot: 'weapon', rarity: 'common', bonus: 2, name: 'Wooden Sword', tier: 0, found: todayKey() };
+    const sword = { id: uid(), slot: 'weapon', rarity: 'common', bonus: 2, name: 'Wooden Sword', base: 'Sword', tier: 0, effects: [], found: todayKey() };
     state.inventory.push(sword);
     state.equipped.weapon = sword.id;
     state.consumables.potion = 1;
@@ -628,7 +716,7 @@ const Game = (() => {
   return {
     get state() { return state; },
     todayKey, keyToDate, weekKey, daysLeftInWeek, hashStr, levelInfo, xpToNext, rankFor, nextRank, maxHP, heroMaxHP, requirements,
-    gearBonus, setInfo, equippedItem, sellPrice, critChance, comboMult, comboActive, comboLeftMs,
+    gearBonus, gearStats, reforge, reforgePrice, setInfo, equippedItem, sellPrice, critChance, comboMult, comboActive, comboLeftMs,
     quests, challengeQuest, progress, complete, undo, swapWorkout, openChest, addTask, removeTask, equip, discard,
     buy, shopPrice, usePotion, skillPoints, spendSkill, resetSkills, lookUnlocked, setLook, checkAchievements,
     stakes, setMotivation, hasMotivation, setSetting, ensureToday, start, load, reset, exportData, importData,

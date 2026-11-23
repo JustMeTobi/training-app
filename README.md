@@ -25,6 +25,7 @@ Open `index.html` in a browser, or host it free on **GitHub Pages** (Settings �
 **Rewards**
 - 🪙 **Gold and shop:** health potions, streak shields, gear crates and epic crates. Sell spare gear for gold.
 - 🎁 **Daily chest:** gold, potions, a shield or gear.
+- ✨ **Gear effects:** Rare gear has 1 effect, Epic 2, and Legendary 2 plus a **unique power**. Effects: Power (boss damage), Precision (crit), Fortune (gold), Vitality (HP), Armor, Luck, Regen and Swiftness (combo time). Unique powers: Executioner, Phoenix, Midas, Second Wind, Time Lord and Vampiric. Every gear type (sword, axe, hammer, blade, hood, crown, buckler, aegis…) looks different on your hero, glows in its effect's color and is colored by its material. 🔨 Reforge re-rolls an item's effects for gold.
 - 🧩 **Gear sets:** 3 matching pieces give +4% XP, 5 give +12%.
 - 🎨 **Appearance:** hair styles and colors, skin tones, plus capes and pets you unlock.
 

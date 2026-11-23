@@ -54,6 +54,8 @@
           <span class="chip" title="Days in a row you beat the enemy">🔥 ${s.hero.streak} day streak</span>
           ${hpPct < 0.3 ? '<span class="chip chip-danger">🩸 Low HP — win today!</span>' : ''}
           <span class="chip" title="Bonus XP from gear and set bonus">✨ +${Game.gearBonus()}% XP</span>
+          ${Game.gearStats().power ? `<span class="chip" title="Extra damage to bosses from gear">⚔️ +${Game.gearStats().power}% dmg</span>` : ''}
+          ${[...Game.gearStats().uniques].map(u => `<span class="chip chip-unique" style="--c:${UNIQUES[u].color}" title="${esc(UNIQUES[u].desc)}">${UNIQUES[u].icon} ${UNIQUES[u].name}</span>`).join('')}
           ${s.consumables.shield ? `<span class="chip" title="Streak shields: saves your streak once each">🛡️ ×${s.consumables.shield}</span>` : ''}
           ${s.consumables.potion ? `<button class="chip chip-btn" id="potion-btn" ${canPotion ? '' : 'disabled'} title="${canPotion ? 'Drink a potion: restores 40% HP' : 'HP is full'}">🧪 ×${s.consumables.potion}${canPotion ? ' Drink' : ''}</button>` : ''}
         </div>
@@ -157,6 +159,8 @@
         <ul>
           <li>💔 −${st.dmg} HP <small>(${Math.max(0, s.hero.hp)} → ${Math.max(0, st.hpAfter)})</small></li>
           ${s.hero.streak ? (st.shield ? `<li>🛡️ A streak shield will save your ${s.hero.streak}-day streak</li>` : `<li>🔥 Lose your ${s.hero.streak}-day streak</li>`) : ''}
+          ${st.phoenix && st.hpAfter <= 0 ? '<li>🔥 Phoenix will save you from the knockout (1 HP left)</li>' : ''}
+          ${Game.gearStats().armor ? `<li>🛡️ Armor blocks ${Game.gearStats().armor}% of the damage</li>` : ''}
           ${st.knockout ? `<li class="ko">💀 <b>KNOCKOUT!</b> ${st.xpLoss ? `−${st.xpLoss} XP and ` : ''}the enemy steals a piece of your gear</li>
             ${m.penalty ? `<li class="ko">⚖️ You owe: <b>${esc(m.penalty)}</b></li>` : ''}` : ''}
         </ul>
@@ -170,7 +174,7 @@
     if (!b) { $('#boss-card').hidden = true; return; }
     $('#boss-card').hidden = false;
     const left = Game.daysLeftInWeek();
-    const pct = b.hits / b.maxHits;
+    const pct = b.hp / b.maxHp;
     $('#boss-card').innerHTML = `
       <div class="battle-head"><span class="eyebrow">👑 Weekly boss</span>
         ${b.defeated ? '<span class="defeated-tag">DEFEATED</span>' : `<span class="boss-time">${left === 1 ? 'Last day!' : `${left} days left`}</span>`}</div>
@@ -178,9 +182,9 @@
         <div class="enemy-art boss-art ${b.defeated ? 'is-defeated' : ''}" id="boss-art">${Art.enemy(b.tier, { boss: true })}</div>
         <div class="enemy-info">
           <div class="enemy-name">${esc(b.name)}</div>
-          <div class="bar-label"><span>Boss HP</span><span>${fmt(b.hits * 100)} / ${fmt(b.maxHits * 100)}</span></div>
+          <div class="bar-label"><span>Boss HP</span><span>${fmt(b.hp)} / ${fmt(b.maxHp)}</span></div>
           <div class="bar boss-bar"><div class="fill" style="width:${(pct * 100).toFixed(1)}%"></div></div>
-          <p class="muted tiny">${b.defeated ? 'Beaten! A new boss arrives on Monday.' : 'Every quest you finish hits the boss. Crits hit twice. Beat it by Sunday midnight for Epic+ gear and a pile of gold.'}</p>
+          <p class="muted tiny">${b.defeated ? 'Beaten! A new boss arrives on Monday.' : `Each quest deals ${Math.round(100 * (1 + Game.gearStats().power / 100))} damage (crits more). Power gear hits harder. Beat it by Sunday midnight for Epic+ gear and gold.`}</p>
         </div>
       </div>`;
   }
@@ -281,19 +285,35 @@
   }
 
   /* ================= gear tab ================= */
+  function effectsList(it) {
+    const lines = (it.effects || []).map(e => `<li style="--c:${EFFECTS[e.id].color}">${EFFECTS[e.id].icon} ${EFFECTS[e.id].desc(e.value)}</li>`);
+    if (it.unique) { const U = UNIQUES[it.unique]; lines.push(`<li class="unique" style="--c:${U.color}">${U.icon} <b>${U.name}:</b> ${U.desc}</li>`); }
+    return lines.length ? `<ul class="fx-list">${lines.join('')}</ul>` : '';
+  }
   function itemCard(it, equipped) {
     const R = RARITIES[it.rarity];
+    const canReforge = it.rarity !== 'common';
     return `<div class="item rarity-${it.rarity} ${equipped ? 'equipped' : ''}">
-      <div class="item-icon">${SLOTS[it.slot].icon}</div>
+      <div class="item-art">${Art.item(it)}</div>
       <div class="item-body">
         <div class="item-name" style="color:${R.color}">${esc(it.name)}</div>
         <div class="item-meta">${R.label} ${SLOTS[it.slot].label} · <b>+${it.bonus}% XP</b></div>
+        ${effectsList(it)}
       </div>
       <div class="item-actions">
         ${equipped ? `<span class="equipped-tag">Equipped</span>` : `<button class="btn btn-small btn-primary" data-equip="${it.id}">Equip</button>
         <button class="btn btn-small btn-ghost" data-sell="${it.id}" title="Sell for ${Game.sellPrice(it)} gold">🪙${Game.sellPrice(it)}</button>`}
+        ${canReforge ? `<button class="btn btn-small btn-ghost" data-reforge="${it.id}" title="Re-roll this item's effects for ${Game.reforgePrice(it)} gold">🔨 ${Game.reforgePrice(it)}</button>` : ''}
       </div>
     </div>`;
+  }
+
+  function gearPowersHTML() {
+    const gs = Game.gearStats();
+    const rows = Object.entries(EFFECTS).filter(([k]) => gs[k] > 0).map(([k, E]) => `<div class="power" style="--c:${E.color}"><span>${E.icon}</span><b>${E.label}</b><small>${E.desc(gs[k])}</small></div>`);
+    const uniq = [...gs.uniques].map(u => { const U = UNIQUES[u]; return `<div class="power unique" style="--c:${U.color}"><span>${U.icon}</span><b>${U.name}</b><small>${U.desc}</small></div>`; });
+    return rows.length || uniq.length ? `<div class="powers">${uniq.join('')}${rows.join('')}</div>`
+      : '<p class="muted">No special effects yet. <b>Rare</b> gear has 1 effect, <b>Epic</b> has 2, and <b>Legendary</b> has 2 plus a unique power.</p>';
   }
 
   function lockText(req) {
@@ -309,7 +329,7 @@
     const slots = Object.keys(SLOTS).map(slot => {
       const it = Game.equippedItem(slot);
       return `<div class="slot ${it ? 'rarity-' + it.rarity : 'empty'}">
-        <div class="slot-icon">${SLOTS[slot].icon}</div>
+        <div class="slot-icon">${it ? `<div class="slot-art">${Art.item(it)}</div>` : SLOTS[slot].icon}</div>
         <div class="slot-label">${SLOTS[slot].label}</div>
         <div class="slot-item">${it ? esc(it.name) : 'Empty'}</div>
         ${it ? `<div class="slot-bonus">+${it.bonus}%</div>` : ''}
@@ -334,6 +354,10 @@
         </div>
       </div>
       <div class="card">
+        <div class="section-head"><h2>⚡ Gear powers</h2><span class="muted tiny">From everything you're wearing</span></div>
+        ${gearPowersHTML()}
+      </div>
+      <div class="card">
         <div class="section-head"><h2>Appearance</h2><span class="muted tiny">Unlock capes and pets by leveling and earning badges</span></div>
         <div class="look-grid">
           <div class="look-preview">${Art.hero(s, Game.levelInfo(s.hero.totalXP).level)}</div>
@@ -347,7 +371,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="section-head"><h2>Backpack</h2><span class="muted">${inv.length} item${inv.length === 1 ? '' : 's'} · sell spare gear for gold</span></div>
+        <div class="section-head"><h2>Backpack</h2><span class="muted">${inv.length} item${inv.length === 1 ? '' : 's'} · sell spares · 🔨 reforge to re-roll effects</span></div>
         <div class="items">${inv.map(it => itemCard(it, s.equipped[it.slot] === it.id)).join('') || '<p class="empty">Nothing yet. Beat an enemy to earn loot!</p>'}</div>
       </div>`;
   }
@@ -651,9 +675,10 @@
   function lootBlock(it) {
     const R = RARITIES[it.rarity];
     return `<div class="loot rarity-${it.rarity}">
-      <div class="loot-icon">${SLOTS[it.slot].icon}</div>
+      <div class="loot-art">${Art.item(it)}</div>
       <div class="loot-name" style="color:${R.color}">${esc(it.name)}</div>
       <div class="loot-meta">${R.label} ${SLOTS[it.slot].label} · +${it.bonus}% XP</div>
+      ${effectsList(it)}
     </div>`;
   }
   /* Loot popup with an Equip button when the new item isn't auto-equipped. */
@@ -687,14 +712,17 @@
         setTimeout(() => floatText(anchor, `+${ev.gold} 🪙`, 'gold-float', 26), 150);
         animate($('#hero-art'), 'attack');
         animate($('#enemy-art'), 'hit');
+        floatText($('#enemy-art'), `-${ev.damage}`, ev.crit ? 'dmg crit' : 'dmg', 10);
+        if (ev.healed) setTimeout(() => floatText($('#hero-art'), `+${ev.healed} HP`, 'heal'), 300);
+        if (ev.secondWind) toast('🌬️ Second Wind! First quest of the day: ×1.5 XP, double damage', 'gold');
         if (ev.crit) {
           Sound.play('crit');
           animate(document.body, 'shake');
-          toast('💥 CRITICAL HIT! Double XP & gold', 'crit-toast');
+          toast(ev.critMult === 3 ? '🪓 EXECUTIONER CRIT! Triple XP & gold' : '💥 CRITICAL HIT! Double XP & gold', 'crit-toast');
         } else Sound.play('complete');
         if (ev.combo >= 2) setTimeout(() => { Sound.play('combo', ev.combo); floatText($('#combo-meter') || anchor, `⚡ COMBO ×${ev.combo}`, 'combo-float'); }, 350);
       } else if (ev.type === 'bossHit') {
-        setTimeout(() => { animate($('#boss-art'), 'hit'); Sound.play('bossHit'); }, 200);
+        setTimeout(() => { animate($('#boss-art'), 'hit'); Sound.play('bossHit'); floatText($('#boss-art'), `-${ev.dmg}`, 'dmg', 10); }, 200);
       } else if (ev.type === 'challenge') {
         toast(`⭐ Daily challenge complete! +${ev.gold} gold`, 'gold');
       } else if (ev.type === 'bonus') {
@@ -762,6 +790,7 @@
         <div class="modal-burst">🌅</div>
         <h2>A new day begins</h2>
         <ul class="report">${lines}
+          ${report.phoenix ? '<li class="win">🔥 <b>Phoenix!</b> Your gear saved you from a knockout with 1 HP left.</li>' : ''}
           ${report.shieldUsed ? `<li class="win">🛡️ A streak shield saved your streak${report.shieldUsed > 1 ? ` (${report.shieldUsed} used)` : ''}!</li>` : ''}
           ${report.bossEscaped ? `<li class="loss">👑 The ${esc(report.bossEscaped)} escaped at the end of the week.</li>` : ''}
           ${report.newBoss ? `<li>👑 A new weekly boss appears: <b>${esc(report.newBoss)}</b></li>` : ''}
@@ -1092,6 +1121,18 @@
       if (sl) {
         const it = Game.state.inventory.find(i => i.id === sl.dataset.sell);
         if (it && confirm(`Sell ${it.name} for ${Game.sellPrice(it)} gold?`)) { Game.discard(it.id); Sound.play('coin'); renderAll(); toast(`🪙 Sold for ${Game.sellPrice(it)} gold`); }
+        return;
+      }
+      const rf = e.target.closest('[data-reforge]');
+      if (rf) {
+        const it = Game.state.inventory.find(i => i.id === rf.dataset.reforge);
+        if (!it || !confirm(`Reforge ${it.name} for ${Game.reforgePrice(it)} gold? Its effects${it.unique ? ' and unique power' : ''} will be re-rolled.`)) return;
+        const res = Game.reforge(it.id);
+        if (!res.ok) { Sound.play('error'); toast('Not enough gold to reforge.'); return; }
+        Sound.play('chest');
+        renderAll();
+        lootModal({ burst: '🔨', title: 'Reforged!', intro: 'The blacksmith hammers new power into your gear:', item: res.item, autoEquip: true });
+        handleEvents(res.events);
         return;
       }
       const lk = e.target.closest('[data-look]');
