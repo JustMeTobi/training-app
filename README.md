@@ -35,6 +35,7 @@ Open `index.html` in a browser, or host it free on **GitHub Pages** (Settings �
 - 📊 **Hero stats:** Strength, Endurance and Discipline grow from what you actually do.
 
 **Daily variety**
+- 🎲 **Quick Quests:** bored and have a few minutes? Roll a random 2, 5 or 15-minute workout or task (about 70 ideas, scaled to your level). Finish it in time for a ⚡ +25% speed bonus; 15% of them bring a 👾 wandering monster that drops gold or gear. They're bonus quests: they don't count toward the daily goal, and the first 5 each day give full rewards (50% after that).
 - ⭐ **Daily challenge:** a bonus quest each day.
 - 🔄 **Swap:** reroll 1 workout per day.
 - 😴 **Rest day:** pick a weekday. The enemy sleeps and one light activity keeps your streak.

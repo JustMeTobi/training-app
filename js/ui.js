@@ -198,13 +198,20 @@
   }
 
   /* ================= quests tab ================= */
+  function speedText(until) {
+    const ms = until - Date.now();
+    if (ms <= 0) return 'no speed bonus';
+    const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
+    return `⚡ ${m}:${String(s).padStart(2, '0')} for +25% XP`;
+  }
   function fmtSecs(t) { return t >= 60 ? `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : `${t}s`; }
 
   function questRow(q) {
     const kindLabel = q.challenge ? 'Daily challenge' : q.kind === 'workout' ? 'Workout' : 'Task';
-    const detail = q.challenge ? `${kindLabel} · +${q.gold} gold` : `${esc(q.detail)} · ${kindLabel}`;
+    let detail = q.challenge ? `${kindLabel} · +${q.gold} gold` : `${esc(q.detail)} · ${kindLabel}`;
+    if (q.quick) detail = `🎲 Quick ${kindLabel.toLowerCase()} · ${QUICK_TIMES[q.time].label}${q.monster && !q.done ? ` · 👾 ${esc(q.monster.name)}` : ''}${q.done ? '' : ` · <span class="speed" data-speed="${q.speedUntil}">${speedText(q.speedUntil)}</span>`}`;
     if (q.done) {
-      return `<li class="quest done ${q.challenge ? 'challenge' : ''} ${q.key === justDone ? 'just-done' : ''}" data-key="${q.key}">
+      return `<li class="quest done ${q.challenge ? 'challenge' : ''} ${q.quick ? 'quick' : ''} ${q.key === justDone ? 'just-done' : ''}" data-key="${q.key}">
         <span class="check" aria-hidden="true">✓</span>
         <div class="q-body"><div class="q-title">${q.icon} ${esc(q.title)}</div><div class="q-detail">${detail}${q.crit ? ' · <b class="crit-tag">💥 CRIT</b>' : ''}</div></div>
         <span class="xp-chip earned">+${q.awarded} XP</span>
@@ -215,8 +222,9 @@
     const actions = [];
     if (q.timer) actions.push(`<button class="q-action" data-timer="${q.key}" title="Start a ${fmtSecs(q.timer)} timer" aria-label="Start timer for ${esc(q.title)}">⏱️</button>`);
     if (q.generated && d.swaps > 0) actions.push(`<button class="q-action" data-swap="${q.key}" title="Swap for a different workout (1 per day)" aria-label="Swap ${esc(q.title)}">🔄</button>`);
-    if (editingTasks && !q.generated && !q.challenge) actions.push(`<button class="q-action del" data-del="${q.taskId}" aria-label="Delete ${esc(q.title)}">🗑️</button>`);
-    return `<li class="quest ${q.challenge ? 'challenge' : ''}" data-key="${q.key}">
+    if (q.quick) actions.push(`<button class="q-action del" data-unquick="${q.quickId}" title="Remove this Quick Quest" aria-label="Remove ${esc(q.title)}">✖</button>`);
+    if (editingTasks && !q.generated && !q.challenge && !q.quick) actions.push(`<button class="q-action del" data-del="${q.taskId}" aria-label="Delete ${esc(q.title)}">🗑️</button>`);
+    return `<li class="quest ${q.challenge ? 'challenge' : ''} ${q.quick ? 'quick' : ''}" data-key="${q.key}">
       <button class="quest-btn" data-complete="${q.key}" aria-label="Complete ${esc(q.title)}">
         <span class="check" aria-hidden="true"></span>
         <span class="q-body"><span class="q-title">${q.icon} ${esc(q.title)}</span><span class="q-detail">${detail}</span></span>
@@ -229,9 +237,11 @@
     const s = Game.state, d = s.day, p = Game.progress();
     const qs = Game.quests();
     const ch = Game.challengeQuest();
+    const quick = Game.quickQuests();
+    const quickTodo = quick.filter(q => !q.done);
     const todoW = qs.filter(q => !q.done && q.kind === 'workout');
     const todoT = qs.filter(q => !q.done && q.kind === 'task');
-    const done = [...qs, ch].filter(q => q.done).sort((a, b) => (d.done[b.key].at - d.done[a.key].at));
+    const done = [...qs, ch, ...quick].filter(q => q.done).sort((a, b) => (d.done[b.key].at - d.done[a.key].at));
     const total = qs.length;
     const doneCount = qs.filter(q => q.done).length;
     $('#tab-count').textContent = `${doneCount}/${total}`;
@@ -245,6 +255,11 @@
 
     $('#tab-quests').innerHTML = `
       ${d.chest === 'closed' ? `<button class="chest-banner" id="chest-btn"><span class="chest-icon">🎁</span><span><b>Daily chest is ready!</b><small>Tap to open: gold, potions or even gear</small></span></button>` : ''}
+      <button class="quick-btn" id="quick-btn">
+        <span class="quick-dice">🎲</span>
+        <span><b>Got time? Get a Quick Quest!</b><small>A random 2–15 min challenge for bonus XP and gold · ${Game.quickFullLeft()}/${QUICK_FULL_PER_DAY} full rewards left today</small></span>
+      </button>
+      ${quickTodo.length ? `<div class="group"><div class="group-head"><h3>🎲 Quick Quests</h3><span class="req ok">bonus · not part of the daily goal</span></div><ul class="quest-list">${quickTodo.map(questRow).join('')}</ul></div>` : ''}
       <div class="quests-summary">
         <div class="summary-ring" style="--p:${total ? doneCount / total : 0}"><span>${doneCount}<small>/${total}</small></span></div>
         <div>
@@ -714,6 +729,7 @@
         animate($('#enemy-art'), 'hit');
         floatText($('#enemy-art'), `-${ev.damage}`, ev.crit ? 'dmg crit' : 'dmg', 10);
         if (ev.healed) setTimeout(() => floatText($('#hero-art'), `+${ev.healed} HP`, 'heal'), 300);
+        if (ev.speed) setTimeout(() => toast('⚡ Speed bonus! +25% XP for finishing fast', 'gold'), 200);
         if (ev.secondWind) toast('🌬️ Second Wind! First quest of the day: ×1.5 XP, double damage', 'gold');
         if (ev.crit) {
           Sound.play('crit');
@@ -736,6 +752,9 @@
         const reward = m.dailyReward ? `<div class="real-reward">🎁 Real-life reward unlocked:<b>${esc(m.dailyReward)}</b></div>` : '';
         if (ev.rest) lootModal({ burst: '😴', title: 'Rest day complete!', extra: reward, intro: `Your streak continues. You found <b>${ev.gold} gold</b> while resting.`, sound: 'victory' });
         else lootModal({ burst: '🏆', title: 'Enemy defeated!', extra: reward, intro: `You beat the <b>${esc(ev.enemy.name)}</b> and got <b>${ev.gold} gold</b>. It also dropped:`, item: ev.item, autoEquip: ev.autoEquip, sound: 'victory' });
+      } else if (ev.type === 'monster') {
+        if (ev.item) lootModal({ burst: '👾', title: 'Wandering monster defeated!', intro: `You beat the <b>${esc(ev.monster.name)}</b> that was following you. It dropped:`, item: ev.item, autoEquip: ev.autoEquip, sound: 'victory' });
+        else lootModal({ burst: '👾', title: 'Wandering monster defeated!', intro: `You beat the <b>${esc(ev.monster.name)}</b> and found a pouch with <b>${ev.gold} gold</b>!`, sound: 'victory' });
       } else if (ev.type === 'bossDefeat') {
         lootModal({ burst: '👑', title: 'WEEKLY BOSS DEFEATED!', intro: `You took down the <b>${esc(ev.boss.name)}</b>! +<b>${ev.gold} gold</b> and a guaranteed Epic+ drop:`, item: ev.item, autoEquip: ev.autoEquip, sound: 'victory' });
       } else if (ev.type === 'streakReward') {
@@ -863,16 +882,86 @@
     });
   }
 
+  /* ---------- quick quest roller ---------- */
+  let quickPrefs = { kind: 'any', time: 5 };
+  function quickModal() {
+    let candidate = null, freeReroll = true;
+    const seen = [];
+    const chips = (name, opts, cur) => opts.map(([v, l]) => `<button type="button" class="look-opt ${String(cur) === String(v) ? 'on' : ''}" data-q${name}="${v}">${l}</button>`).join('');
+    const md = modal(`
+      <div class="modal-burst quick-burst" id="quick-dice">🎲</div>
+      <h2>Quick Quest</h2>
+      <p class="muted">Bored and got a few minutes? Roll a random challenge. Finish it within the time for a ⚡ +25% speed bonus.</p>
+      <div class="look-row"><span>Type</span><div class="opts" id="q-kind">${chips('kind', [['workout', '🏋️ Workout'], ['task', '📜 Task'], ['any', '🎲 Surprise me']], quickPrefs.kind)}</div></div>
+      <div class="look-row"><span>Time I have</span><div class="opts" id="q-time">${chips('time', Object.entries(QUICK_TIMES).map(([k, t]) => [k, `${t.icon} ${t.label}`]), quickPrefs.time)}</div></div>
+      <div id="quick-result"></div>
+      <div class="modal-actions" id="quick-actions"><button class="btn btn-primary btn-block" id="quick-roll">🎲 Roll!</button></div>`);
+    const root = md.root;
+    const res = root.querySelector('#quick-result'), acts = root.querySelector('#quick-actions');
+    root.addEventListener('click', (e) => {
+      const k = e.target.closest('[data-qkind]'), t = e.target.closest('[data-qtime]');
+      if (k) { quickPrefs.kind = k.dataset.qkind; root.querySelectorAll('[data-qkind]').forEach(b => b.classList.toggle('on', b === k)); Sound.play('click'); }
+      if (t) { quickPrefs.time = +t.dataset.qtime; root.querySelectorAll('[data-qtime]').forEach(b => b.classList.toggle('on', b === t)); Sound.play('click'); }
+      if (e.target.closest('#quick-roll')) roll(false);
+      if (e.target.closest('#quick-reroll')) {
+        if (!freeReroll && !Game.payGold(10)) { Sound.play('error'); toast('You need 10 gold to reroll.'); return; }
+        const wasFree = freeReroll; freeReroll = false; roll(true, wasFree);
+      }
+      if (e.target.closest('#quick-accept') && candidate) {
+        const q = Game.acceptQuick(candidate);
+        Sound.play('buy');
+        md.close();
+        renderAll();
+        toast(`🎲 Quick Quest accepted: ${q.title}`);
+        if (q.monster) setTimeout(() => toast(`👾 A wandering ${q.monster.name} is following you!`, 'crit-toast'), 400);
+      }
+      if (e.target.closest('#quick-skip')) { candidate = null; freeReroll = true; res.innerHTML = ''; acts.innerHTML = '<button class="btn btn-primary btn-block" id="quick-roll">🎲 Roll!</button>'; }
+    });
+    function roll(isReroll, wasFree) {
+      const dice = root.querySelector('#quick-dice');
+      animate(dice, 'rolling');
+      Sound.play('swap');
+      acts.innerHTML = '';
+      // flash a few random titles before revealing, like a slot machine
+      let n = 0;
+      const pool = QUICK_QUESTS.filter(q => q.time === quickPrefs.time && (quickPrefs.kind === 'any' || q.kind === quickPrefs.kind));
+      const iv = setInterval(() => {
+        const p = pool[Math.floor(Math.random() * pool.length)];
+        res.innerHTML = `<div class="quick-card spinning"><span class="quick-icon">${p.icon}</span><b>${esc(p.t.replace(/\{n\}/g, '?'))}</b></div>`;
+        if (++n % 2) Sound.play('tick');
+        if (n >= 8) { clearInterval(iv); reveal(isReroll, wasFree); }
+      }, 85);
+    }
+    function reveal(isReroll, wasFree) {
+      candidate = Game.rollQuick(quickPrefs, seen);
+      seen.push(candidate.t);
+      const half = Game.quickFullLeft() === 0;
+      Sound.play(candidate.monster ? 'bossHit' : 'coin');
+      res.innerHTML = `<div class="quick-card ${candidate.monster ? 'has-monster' : ''}">
+        <span class="quick-icon">${candidate.icon}</span>
+        <b>${esc(candidate.title)}</b>
+        <small>${candidate.kind === 'workout' ? '🏋️ Workout' : '📜 Task'} · ${QUICK_TIMES[candidate.time].icon} ${QUICK_TIMES[candidate.time].label}${candidate.timer ? ' · ⏱️ timer available' : ''}</small>
+        <div class="quick-rewards"><span>+${half ? Math.round(candidate.xp / 2) : candidate.xp} XP</span><span>+${half ? Math.round(candidate.gold / 2) : candidate.gold} 🪙</span><span>⚡ +25% if done in ${QUICK_TIMES[candidate.time].label}</span></div>
+        ${half ? '<p class="muted tiny">You\'ve used today\'s 5 full-reward Quick Quests, so this one gives 50%.</p>' : ''}
+        ${candidate.monster ? `<div class="monster-alert"><div class="monster-art">${Art.enemy(candidate.monster.tier)}</div><span><b>👾 A wandering ${esc(candidate.monster.name)} appears!</b><small>Finish this quest to beat it: it drops gold or gear.</small></span></div>` : ''}
+      </div>`;
+      acts.innerHTML = `<button class="btn btn-ghost" id="quick-skip">✖ Skip</button>
+        <button class="btn btn-ghost" id="quick-reroll">🔄 Reroll${freeReroll ? ' (free)' : ' 🪙10'}</button>
+        <button class="btn btn-primary" id="quick-accept">✅ Accept</button>`;
+      if (isReroll && !wasFree) renderAll();
+    }
+  }
+
   /* ---------- workout timer ---------- */
   let wakeLock = null;
   function timerModal(key) {
-    const q = Game.quests().find(x => x.key === key);
+    const q = [...Game.quests(), ...Game.quickQuests()].find(x => x.key === key);
     if (!q || !q.timer) return;
     const total = q.timer;
     let remaining = total, endAt = 0, running = false, iv = null, lastBeep = -1;
     const md = modal(`
       <h2>⏱️ ${esc(q.title)}</h2>
-      <p class="muted">${esc(q.detail)} · the quest completes automatically when the timer ends.</p>
+      <p class="muted">${q.quick ? 'Quick Quest' : esc(q.detail)} · the quest completes automatically when the timer ends.</p>
       <div class="timer-ring" id="timer-ring" style="--p:1"><span id="timer-text">${fmtSecs(total)}</span></div>
       <div class="modal-actions">
         <button class="btn btn-primary" id="timer-toggle">▶ Start</button>
@@ -1087,6 +1176,9 @@
         return;
       }
       if (e.target.closest('#chest-btn')) { openChestFlow(); return; }
+      if (e.target.closest('#quick-btn')) { Sound.play('click'); quickModal(); return; }
+      const uq = e.target.closest('[data-unquick]');
+      if (uq) { Game.removeQuick(uq.dataset.unquick); Sound.play('undo'); renderAll(); toast('Quick Quest removed'); return; }
       const tm = e.target.closest('[data-timer]');
       if (tm) { timerModal(tm.dataset.timer); return; }
       const sw = e.target.closest('[data-swap]');
@@ -1217,6 +1309,7 @@
         const t = comboText();
         if (cm) { cm.textContent = t; cm.hidden = !t; }
         if (comboWas && !t) toast('⚡ Combo ended');
+        document.querySelectorAll('[data-speed]').forEach(el => { el.textContent = speedText(+el.dataset.speed); });
         comboWas = !!t;
       }
       const key = Game.todayKey();

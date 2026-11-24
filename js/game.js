@@ -275,7 +275,7 @@ const Game = (() => {
       done: {}, enemy,
       challenge: { ...ch, xp: Math.round(effortXP('hard', lv, diff) * 1.5), gold: 40 + lv * 3 },
       lootGiven: false, bonusXP: 0, streakCounted: false,
-      combo: 0, lastAt: 0, swaps: 1, chest: 'closed',
+      combo: 0, lastAt: 0, swaps: 1, chest: 'closed', quick: [], quickDone: 0,
     };
   }
   function makeWorkout(w, lv, diff, scale = 1) {
@@ -310,7 +310,7 @@ const Game = (() => {
 
   function progress(day = state.day) {
     let w = 0, t = 0;
-    for (const v of Object.values(day.done)) v.kind === 'workout' ? w++ : t++;
+    for (const v of Object.values(day.done)) { if (v.quick) continue; v.kind === 'workout' ? w++ : t++; }
     const need = day.req.workouts + day.req.tasks;
     const got = Math.min(w, day.req.workouts) + Math.min(t, day.req.tasks);
     return { workouts: w, tasks: t, pct: need ? got / need : 1, met: got >= need };
@@ -323,9 +323,58 @@ const Game = (() => {
   function comboActive() { return state.day.combo > 1 && Date.now() - state.day.lastAt < comboWindow(); }
   function comboLeftMs() { return Math.max(0, comboWindow() - (Date.now() - state.day.lastAt)); }
 
+  /* ---------- quick quests ---------- */
+  function quickFillAmount(def, lv, diff) {
+    if (!def.base) return null;
+    const D = DIFFICULTIES[diff];
+    return niceRound(def.base * (def.unit === 'min' || def.unit === 'times' || def.unit === 'rounds' ? 1 + (D.rep - 1) * 0.4 : D.rep) * (1 + (lv - 1) * D.repGrowth * (def.growth ?? 1)));
+  }
+  /* Pick a random quick quest (not stored until accepted). */
+  function rollQuick({ kind = 'any', time = 5 } = {}, exclude = []) {
+    const lv = level(), diff = state.hero.difficulty;
+    const active = new Set([...(state.day.quick || []).map(q => q.t), ...exclude]);
+    let pool = QUICK_QUESTS.filter(q => q.time === +time && (kind === 'any' || q.kind === kind));
+    const fresh = pool.filter(q => !active.has(q.t));
+    if (fresh.length) pool = fresh;
+    const def = pick(pool);
+    const amount = quickFillAmount(def, lv, diff);
+    const title = def.t.replace(/\{n\}/g, amount);
+    const timer = def.fixedTimer || (def.unit === 'sec' ? amount : def.unit === 'min' ? amount * 60 : 0);
+    const xp = Math.round(QUICK_TIMES[def.time].xp * DIFFICULTIES[diff].xp * levelXpScale(lv));
+    const monster = Math.random() < 0.15 ? makeEnemy(lv, diff) : null;
+    return { t: def.t, title, icon: def.icon, kind: def.kind, time: def.time, amount, exId: def.ex || null, timer, xp, gold: Math.max(3, Math.round(xp / 3)), monster };
+  }
+  function quickFullLeft() { return Math.max(0, QUICK_FULL_PER_DAY - (state.day.quickDone || 0)); }
+  function acceptQuick(c) {
+    state.day.quick = state.day.quick || [];
+    const q = { ...c, id: uid(), acceptedAt: Date.now() };
+    state.day.quick.unshift(q);
+    save();
+    return q;
+  }
+  function removeQuick(id) {
+    if (state.day.done['q:' + id]) return;
+    state.day.quick = (state.day.quick || []).filter(q => q.id !== id);
+    save();
+  }
+  function payGold(n) { if (state.hero.gold < n) return false; state.hero.gold -= n; save(); return true; }
+  function quickQuests() {
+    const half = quickFullLeft() === 0;
+    return (state.day.quick || []).map(q => {
+      const done = state.day.done['q:' + q.id];
+      return {
+        key: 'q:' + q.id, quickId: q.id, kind: q.kind, title: q.title, icon: q.icon, exId: q.exId, amount: q.amount,
+        attr: q.exId ? (WORKOUTS.find(w => w.id === q.exId) || {}).attr || 'end' : q.kind === 'workout' ? 'end' : 'dis',
+        xp: done ? q.xp : Math.round(q.xp * (half ? 0.5 : 1)), gold: q.gold, timer: q.timer, quick: true, time: q.time,
+        monster: q.monster, acceptedAt: q.acceptedAt, speedUntil: q.acceptedAt + q.time * 60 * 1000,
+        done: !!done, awarded: done?.xp, crit: done?.crit,
+      };
+    });
+  }
+
   /* ---------- actions ---------- */
   function complete(key, { viaTimer = false } = {}) {
-    const q = key === 'c:daily' ? challengeQuest() : quests().find(x => x.key === key);
+    const q = key === 'c:daily' ? challengeQuest() : key.startsWith('q:') ? quickQuests().find(x => x.key === key) : quests().find(x => x.key === key);
     if (!q || q.done) return [];
     const d = state.day, events = [];
     const lvBefore = level();
@@ -339,16 +388,18 @@ const Game = (() => {
     const crit = Math.random() < critChance();
     const critMult = crit ? (gs.uniques.has('executioner') ? 3 : 2) : 1;
     const skill = q.kind === 'workout' ? state.skills.warrior : state.skills.scholar;
-    const mult = (1 + gearBonus() / 100 + skill * 0.05) * comboMult(d.combo) * critMult * (first ? 1.5 : 1);
+    const speed = q.quick && now <= q.speedUntil;
+    const halfQuick = q.quick && quickFullLeft() === 0;
+    const mult = (1 + gearBonus() / 100 + skill * 0.05) * comboMult(d.combo) * critMult * (first ? 1.5 : 1) * (speed ? 1.25 : 1);
     const xp = Math.round(q.xp * mult);
-    const gold = Math.round((q.gold || Math.max(2, q.xp / 4)) * critMult * (1 + gs.gold / 100));
+    const gold = Math.round((q.gold || Math.max(2, q.xp / 4)) * critMult * (1 + gs.gold / 100) * (halfQuick ? 0.5 : 1));
     const damage = Math.round(100 * (1 + gs.power / 100) * critMult * (first ? 2 : 1));
     const bossDmg = state.boss && !state.boss.defeated ? Math.min(state.boss.hp, damage) : 0;
     const hpBefore = state.hero.hp;
     state.hero.hp = Math.min(heroMaxHP(), state.hero.hp + gs.regen + (crit && gs.uniques.has('vampire') ? 15 : 0));
     const healed = state.hero.hp - hpBefore;
 
-    d.done[key] = { xp, gold, kind: q.kind, at: now, crit, attr: q.attr, exId: q.exId, amount: q.amount, bossDmg, healed, timer: viaTimer, challenge: !!q.challenge };
+    d.done[key] = { xp, gold, kind: q.kind, at: now, crit, attr: q.attr, exId: q.exId, amount: q.amount, bossDmg, healed, timer: viaTimer, challenge: !!q.challenge, quick: !!q.quick };
     state.hero.totalXP += xp;
     addGold(gold);
     state.stats[q.kind === 'workout' ? 'workouts' : 'tasks']++;
@@ -357,7 +408,23 @@ const Game = (() => {
     if (crit) state.stats.crits++;
     if (viaTimer) state.stats.timers++;
     if (q.challenge) state.stats.challenges++;
-    events.push({ type: 'xp', amount: xp, gold, crit, critMult, combo: d.combo, kind: q.kind, damage, healed, secondWind: first });
+    if (q.quick) { d.quickDone = (d.quickDone || 0) + 1; state.stats.quick = (state.stats.quick || 0) + 1; }
+    events.push({ type: 'xp', amount: xp, gold, crit, critMult, combo: d.combo, kind: q.kind, damage, healed, secondWind: first, speed, halfQuick });
+    // A wandering monster rides along with some quick quests.
+    const qq = q.quick && (d.quick || []).find(x => 'q:' + x.id === key);
+    if (qq && qq.monster && !qq.monsterBeaten) {
+      qq.monsterBeaten = true;
+      state.stats.monsters = (state.stats.monsters || 0) + 1;
+      state.bestiary[qq.monster.tier] = (state.bestiary[qq.monster.tier] || 0) + 1;
+      if (Math.random() < 0.5) {
+        const item = makeItem(level(), state.hero.difficulty);
+        events.push({ type: 'monster', monster: qq.monster, item, autoEquip: giveItem(item) });
+      } else {
+        const mg = Math.round((40 + level() * 4) * (1 + gs.gold / 100) * (gs.uniques.has('midas') ? 2 : 1));
+        addGold(mg);
+        events.push({ type: 'monster', monster: qq.monster, gold: mg });
+      }
+    }
     if (q.challenge) events.push({ type: 'challenge', gold });
 
     if (bossDmg) {
@@ -434,6 +501,7 @@ const Game = (() => {
     if (e.crit) state.stats.crits = Math.max(0, state.stats.crits - 1);
     if (e.timer) state.stats.timers = Math.max(0, state.stats.timers - 1);
     if (e.challenge) state.stats.challenges = Math.max(0, state.stats.challenges - 1);
+    if (e.quick) { state.day.quickDone = Math.max(0, (state.day.quickDone || 0) - 1); state.stats.quick = Math.max(0, (state.stats.quick || 0) - 1); }
     if (e.bossDmg && state.boss && !state.boss.defeated) state.boss.hp = Math.min(state.boss.maxHp, state.boss.hp + e.bossDmg);
     if (e.healed) state.hero.hp = Math.max(1, state.hero.hp - e.healed);
     if (!progress().met) {
@@ -650,6 +718,7 @@ const Game = (() => {
     s.motivation = { ...DEFAULT_MOTIVATION, ...(s.motivation || {}) };
     if (s.day) {
       const d = s.day;
+      d.quick ??= []; d.quickDone ??= 0;
       d.combo ??= 0; d.lastAt ??= 0; d.swaps ??= 1; d.chest ??= 'closed'; d.rest ??= false;
       if (!d.challenge) {
         const ch = CHALLENGES[hashStr(d.key + s.hero.name) % CHALLENGES.length];
@@ -717,7 +786,7 @@ const Game = (() => {
     get state() { return state; },
     todayKey, keyToDate, weekKey, daysLeftInWeek, hashStr, levelInfo, xpToNext, rankFor, nextRank, maxHP, heroMaxHP, requirements,
     gearBonus, gearStats, reforge, reforgePrice, setInfo, equippedItem, sellPrice, critChance, comboMult, comboActive, comboLeftMs,
-    quests, challengeQuest, progress, complete, undo, swapWorkout, openChest, addTask, removeTask, equip, discard,
+    quests, challengeQuest, quickQuests, rollQuick, acceptQuick, removeQuick, quickFullLeft, payGold, progress, complete, undo, swapWorkout, openChest, addTask, removeTask, equip, discard,
     buy, shopPrice, usePotion, skillPoints, spendSkill, resetSkills, lookUnlocked, setLook, checkAchievements,
     stakes, setMotivation, hasMotivation, setSetting, ensureToday, start, load, reset, exportData, importData,
     setDifficulty, rename, workoutAmount,
