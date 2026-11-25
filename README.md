@@ -16,6 +16,8 @@ Open `index.html` in a browser, or host it free on **GitHub Pages** (Settings �
 - Real-life motivation: your reason, a daily reward, a big streak reward and a forfeit.
 
 **Combat**
+- 🏟️ **Battle scene:** your hero and today's enemy face off in an animated arena. Every quest you finish makes your hero run in and strike with the equipped weapon (sword slash, axe chop, hammer shockwave, double blade cut). Crits zoom and shake, combos glow, and each enemy type goes down its own way (melts, falls, crumbles, fades) with a coin shower. The background changes as you reach tougher enemies: meadow, forest, cave, frozen ruins, volcano. On rest days the enemy sleeps and your hero rests by a campfire.
+- 💬 **Taunting enemies:** 200+ lines across 7 personalities (silly slimes, sneaky goblins, sarcastic skeletons, brutish orcs, spooky wraiths, arrogant dragons, a dramatic lich). They greet you by time of day, react to every hit, poke you when you've been idle, and get personal with your streak, reward and forfeit. Set them to Off, Normal or 🔥 Savage in Journey → Settings.
 - 👑 **Weekly boss:** every quest you do during the week damages it. Beat it by Sunday midnight for Epic+ gear and gold.
 - 💥 **Critical hits:** a chance for double XP and gold.
 - ⚡ **Combos:** quests done within 15 minutes of each other stack an XP multiplier (up to +50%).
@@ -59,5 +61,7 @@ js/data.js      difficulties, workouts, enemies, gear, shop, achievements, cosme
 js/game.js      game rules and saving (no DOM code)
 js/art.js       pixel-style SVG hero, pets and enemies
 js/sound.js     retro sound effects (Web Audio, no files)
+js/taunts.js    enemy taunt lines and personalities
+js/arena.js     animated battle scene
 js/ui.js        rendering and interaction
 ```

@@ -780,7 +780,7 @@ const Game = (() => {
     s.customExercises ??= {};
     s.achievements ??= {};
     s.look = { hair: 0, hairColor: 0, skin: 0, cape: null, pet: null, ...(s.look || {}) };
-    s.settings = { restDay: null, reminders: false, reminderTime: '18:00', lastReminded: null, ...(s.settings || {}) };
+    s.settings = { restDay: null, reminders: false, reminderTime: '18:00', lastReminded: null, taunts: 'normal', ...(s.settings || {}) };
     s.boss ??= null;
     if (s.boss && s.boss.hits != null) { s.boss.maxHp = s.boss.maxHits * 100; s.boss.hp = s.boss.hits * 100; delete s.boss.hits; delete s.boss.maxHits; }
     for (const it of s.inventory) {

@@ -1,8 +1,8 @@
 /* QuestFit service worker: caches the app so it works offline. Bump VERSION when files change. */
-const VERSION = 'questfit-v5';
+const VERSION = 'questfit-v6';
 const FILES = [
   './', './index.html', './manifest.json', './css/style.css',
-  './js/data.js', './js/game.js', './js/art.js', './js/sound.js', './js/ui.js',
+  './js/data.js', './js/game.js', './js/art.js', './js/sound.js', './js/taunts.js', './js/arena.js', './js/ui.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
 ];
 

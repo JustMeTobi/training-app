@@ -102,7 +102,7 @@ h3 { font-size: 1rem; margin: 0; }
 .hero-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .3rem; }
 .hero-art.attack .hero-svg { animation: attack .45s ease-out; }
 .aura { animation: pulse 2.4s ease-in-out infinite; }
-.weapon { transform-origin: 51px 52px; }
+.weapon { transform-box: view-box; transform-origin: 67px 52px; }
 .hero-art.attack .weapon { animation: swing .45s ease-out; }
 
 /* ---------- battle ---------- */
@@ -589,3 +589,105 @@ body.shake { animation: shake .4s ease-out; }
 .link-row > b { display: block; margin-bottom: .4rem; }
 .ex-hint { margin: -.3rem 0 .8rem; }
 .ex-fields .field-narrow { flex: 0 0 120px; }
+
+/* ================= v6: battle arena ================= */
+.arena { position: relative; height: 168px; border-radius: 14px; overflow: hidden; border: 2px solid #000; margin: .2rem 0 .8rem; background: #111; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.arena-bg, .arena-bg-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.arena-hero { position: absolute; left: 3%; bottom: 3%; width: 36%; max-width: 160px; z-index: 2; transition: transform .3s cubic-bezier(.3,.8,.4,1); }
+.arena-hero svg, .arena-enemy svg { width: 100%; height: auto; display: block; }
+.arena-hero.run { transform: translateX(var(--run, 100px)); }
+.arena-enemy { position: absolute; right: 7%; bottom: 8%; width: 28%; max-width: 120px; z-index: 2; }
+.arena-hero.glow svg { filter: drop-shadow(0 0 5px #a855f7) drop-shadow(0 0 10px #a855f7); }
+.arena-hero.resting svg { transform: translateY(6px) scaleY(.94); transform-origin: bottom; }
+.arena-hero.victory svg { animation: victoryJump .8s ease-out; }
+@keyframes victoryJump { 0%,100% { transform: translateY(0); } 30% { transform: translateY(-22px) rotate(-6deg); } 55% { transform: translateY(0); } 75% { transform: translateY(-8px); } }
+
+/* weapon-specific strikes */
+.arena-hero .weapon { transform-box: view-box; }
+.arena-hero.strike-sword .weapon { animation: aSword .4s ease-out; }
+.arena-hero.strike-axe .weapon { animation: aAxe .42s ease-in; }
+.arena-hero.strike-hammer .weapon { animation: aHammer .42s ease-in; }
+.arena-hero.strike-blade .weapon { animation: aBlade .42s linear; }
+.arena-hero.strike-none svg { animation: aPunch .35s ease-out; }
+@keyframes aSword { 0% { transform: rotate(0); } 30% { transform: rotate(-45deg); } 60% { transform: rotate(95deg); } 100% { transform: rotate(0); } }
+@keyframes aAxe { 0% { transform: rotate(0); } 40% { transform: rotate(-120deg); } 65% { transform: rotate(100deg); } 100% { transform: rotate(0); } }
+@keyframes aHammer { 0% { transform: rotate(0); } 45% { transform: rotate(-150deg); } 65% { transform: rotate(80deg) translateY(4px); } 100% { transform: rotate(0); } }
+@keyframes aBlade { 0% { transform: rotate(0); } 20% { transform: rotate(80deg); } 40% { transform: rotate(-30deg); } 65% { transform: rotate(90deg); } 100% { transform: rotate(0); } }
+@keyframes aPunch { 0%,100% { transform: translateX(0); } 40% { transform: translateX(14px) scale(1.05); } }
+
+/* enemy reactions */
+.arena-enemy.hit .enemy-svg { animation: aHit .5s ease-out; }
+.arena-enemy.hit-crit .enemy-svg { animation: aHitCrit .65s ease-out; }
+@keyframes aHit { 0% { filter: brightness(3) saturate(0); transform: translateX(0); } 25% { transform: translateX(14px) rotate(6deg); } 50% { filter: none; } 100% { transform: translateX(0); } }
+@keyframes aHitCrit { 0% { filter: brightness(4) saturate(0); transform: translateX(0) scale(1); } 20% { transform: translateX(26px) rotate(14deg) scale(.92); } 45% { filter: brightness(2) saturate(0); } 100% { filter: none; transform: none; } }
+.arena-enemy.talking .enemy-svg { animation: talk .22s ease-in-out infinite alternate; }
+@keyframes talk { from { transform: scaleY(1); } to { transform: scaleY(.93) translateY(3px); } }
+.arena-enemy.down .enemy-svg { animation: none; filter: grayscale(1) brightness(.6); transform-origin: 50% 90%; }
+.arena-enemy.down-melt .enemy-svg { transform: scaleY(.25) scaleX(1.35) translateY(30%); }
+.arena-enemy.down-fall .enemy-svg { transform: rotate(-80deg) translate(-20%, 10%); }
+.arena-enemy.down-crumble .enemy-svg { transform: rotate(-18deg) translateY(28%) scale(.85); opacity: .7; }
+.arena-enemy.down-fade .enemy-svg { opacity: .15; transform: translateY(-12px); }
+.arena-enemy.die-melt .enemy-svg { animation: dMelt .7s ease-in forwards; }
+.arena-enemy.die-fall .enemy-svg { animation: dFall .7s ease-in forwards; }
+.arena-enemy.die-crumble .enemy-svg { animation: dCrumble .7s ease-in forwards; }
+.arena-enemy.die-fade .enemy-svg { animation: dFade .7s ease-in forwards; }
+@keyframes dMelt { to { transform: scaleY(.25) scaleX(1.35) translateY(30%); filter: grayscale(1) brightness(.6); } }
+@keyframes dFall { 30% { transform: rotate(10deg); } to { transform: rotate(-80deg) translate(-20%, 10%); filter: grayscale(1) brightness(.6); } }
+@keyframes dCrumble { 0%,30% { transform: translateX(0); } 10% { transform: translateX(-4px); } 20% { transform: translateX(4px); } to { transform: rotate(-18deg) translateY(28%) scale(.85); opacity: .7; filter: grayscale(1) brightness(.6); } }
+@keyframes dFade { to { opacity: .15; transform: translateY(-12px); filter: grayscale(1) brightness(.6); } }
+
+/* hit effects */
+.arena-fx { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.fx-slash { position: absolute; right: 9%; bottom: 20%; width: 26%; max-width: 110px; aspect-ratio: 1; border-radius: 50%; border-top: 5px solid var(--c); border-right: 5px solid transparent; opacity: 0; filter: drop-shadow(0 0 4px var(--c)); animation: slash .45s ease-out; }
+.fx-slash.second { animation-name: slash2; }
+.fx-slash.chop { border-top-width: 7px; animation-name: chop; }
+@keyframes slash { 0% { opacity: 1; transform: rotate(-70deg) scale(.5); } 100% { opacity: 0; transform: rotate(60deg) scale(1.1); } }
+@keyframes slash2 { 0% { opacity: 1; transform: rotate(110deg) scale(.5) scaleX(-1); } 100% { opacity: 0; transform: rotate(240deg) scale(1.1) scaleX(-1); } }
+@keyframes chop { 0% { opacity: 1; transform: rotate(-120deg) scale(.6); } 100% { opacity: 0; transform: rotate(30deg) scale(1.2); } }
+.fx-shock { position: absolute; right: 6%; bottom: 5%; width: 36%; height: 16px; border: 3px solid var(--c); border-radius: 50%; opacity: 0; animation: shock .65s ease-out; }
+@keyframes shock { 0% { opacity: 1; transform: scale(.2); } 100% { opacity: 0; transform: scale(1.4); } }
+.fx-punch { position: absolute; right: 22%; bottom: 34%; width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle, #fff 0%, var(--c) 40%, transparent 70%); animation: punchFx .35s ease-out forwards; }
+@keyframes punchFx { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+.fx-bolt { position: absolute; right: 18%; top: 4%; font-size: 2.4rem; animation: bolt .55s ease-out forwards; filter: drop-shadow(0 0 8px #c084fc); }
+@keyframes bolt { 0% { opacity: 0; transform: translateY(-20px) scale(.6); } 25% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+.arena-dmg { position: absolute; right: 14%; top: 22%; font-family: var(--pixel); font-size: .85rem; color: #fecaca; text-shadow: 0 2px 0 #000, 0 0 6px #ef4444; animation: dmgUp 1.1s ease-out forwards; }
+.arena-dmg.crit { font-size: 1.05rem; color: #fde047; }
+@keyframes dmgUp { 0% { opacity: 0; transform: translateY(10px) scale(.6); } 15% { opacity: 1; transform: translateY(-4px) scale(1.2); } 100% { opacity: 0; transform: translateY(-34px); } }
+.arena-coin { position: absolute; right: 20%; bottom: 22%; font-size: .9rem; animation: coinArc 1.2s ease-out forwards; }
+@keyframes coinArc { 0% { transform: translate(0, 0); opacity: 1; } 45% { transform: translate(calc(var(--dx) * .6), var(--dy)); } 100% { transform: translate(var(--dx), 40px); opacity: 0; } }
+.arena.crit-zoom { animation: critZoom .6s ease-out; }
+@keyframes critZoom { 0% { transform: scale(1); } 20% { transform: scale(1.05); } 100% { transform: scale(1); } }
+.arena-monster { position: absolute; left: 50%; bottom: 6%; width: 15%; max-width: 64px; z-index: 2; animation: monsterIn .45s ease-out; }
+.arena-monster svg { width: 100%; height: auto; display: block; animation: none; }
+.arena-monster.bonk { animation: monsterBonk .65s ease-in forwards; }
+@keyframes monsterIn { from { transform: translateX(260%); } to { transform: none; } }
+@keyframes monsterBonk { 0% { filter: brightness(3); } 40% { transform: translate(30px, -30px) rotate(200deg) scale(.8); } 100% { transform: translate(60px, -60px) rotate(400deg) scale(0); opacity: 0; } }
+
+/* speech bubble */
+.arena-bubble { position: absolute; top: 6px; right: 6px; max-width: 62%; z-index: 4; background: #fff; color: #1f2937; font-size: .76rem; font-weight: 800; line-height: 1.3; border-radius: 12px; padding: .4rem .6rem; box-shadow: 0 3px 0 rgba(0,0,0,.35); }
+.arena-bubble::after { content: ''; position: absolute; right: 18%; bottom: -7px; border: 7px solid transparent; border-top-color: #fff; border-bottom: 0; }
+.arena-bubble.pop { animation: pop .3s ease-out; }
+.arena-bubble span::after { content: ''; }
+
+/* campfire + scenery motion */
+.arena-fire { position: absolute; left: 42%; bottom: 7%; width: 11%; max-width: 44px; z-index: 1; }
+.campfire { width: 100%; height: auto; display: block; }
+.campfire .flame { transform-origin: 50% 90%; transform-box: fill-box; animation: flicker .35s ease-in-out infinite alternate; }
+.campfire .f2 { animation-duration: .27s; }
+@keyframes flicker { from { transform: scaleY(1) skewX(0); } to { transform: scaleY(1.15) skewX(4deg); } }
+.bg-cloud { animation: drift 40s linear infinite; }
+.bg-cloud.slow { animation-duration: 60s; }
+@keyframes drift { from { transform: translateX(-60px); } to { transform: translateX(320px); } }
+.bg-firefly { fill: #fde047; animation: blink 4s ease-in-out infinite; }
+@keyframes blink { 0%,100% { opacity: 0; } 50% { opacity: .9; } }
+.bg-snow { fill: #fff; animation: snow 5s linear infinite; }
+@keyframes snow { from { transform: translateY(0); } to { transform: translateY(135px); } }
+.bg-ember { fill: #fb923c; animation: ember 4s ease-out infinite; }
+@keyframes ember { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-80px); opacity: 0; } }
+.bg-drip { fill: #93c5fd; animation: drip 3s ease-in infinite; }
+@keyframes drip { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(90px); opacity: 0; } }
+.bg-lava { animation: lava 1.8s ease-in-out infinite alternate; }
+@keyframes lava { from { opacity: .6; } to { opacity: 1; } }
+.bg-crystal { animation: lava 2.4s ease-in-out infinite alternate; }
+.arena-info { margin-bottom: .2rem; }
+@media (max-width: 480px) { .arena { height: 150px; } }

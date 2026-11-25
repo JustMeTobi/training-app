@@ -62,12 +62,31 @@
       </div>`;
   }
 
-  function taunt() {
-    const d = Game.state.day, p = Game.progress();
-    const phase = d.rest ? 'sleeping' : p.met ? 'beaten' : p.pct >= 0.66 ? 'almost' : p.pct > 0 ? 'hurt' : 'fresh';
-    const lines = TAUNTS[phase];
-    return lines[Game.hashStr(d.key + phase) % lines.length];
+  /* ---------- enemy voice ---------- */
+  let lastTauntAt = 0, lastActivity = Date.now();
+  function tauntCtx() {
+    const s = Game.state, m = s.motivation, d = s.day, p = Game.progress();
+    const weakest = Object.entries(s.attrs).sort((a, b) => a[1] - b[1])[0];
+    const pet = s.look.pet ? (LOOKS.pets.find(x => x.id === s.look.pet) || {}).name : '';
+    const left = Math.max(0, d.req.workouts - p.workouts) + Math.max(0, d.req.tasks - p.tasks);
+    return {
+      tier: d.enemy.tier, mode: s.settings.taunts || 'normal', name: s.hero.name,
+      forfeit: m.penalty || null, reward: m.dailyReward || null, why: m.why || null,
+      streak: s.hero.streak >= 2 ? s.hero.streak : null,
+      stat: weakest && weakest[1] < 20 ? ATTRS[weakest[0]].label : null, statLv: weakest ? Math.floor(weakest[1] / 10) + 1 : 1,
+      left: left || null, pet: pet ? pet.toLowerCase() : null,
+    };
   }
+  function speak(situation) {
+    const line = Taunts.line(situation, tauntCtx());
+    lastTauntAt = Date.now();
+    if (line) Arena.say(line); else Arena.hideBubble();
+  }
+  function greet() {
+    const d = Game.state.day, p = Game.progress(), st = Game.stakes();
+    speak(d.rest ? 'sleeping' : p.met ? 'beaten' : st.knockout ? 'cocky' : p.pct >= 0.66 ? 'nervous' : Taunts.greetSituation(new Date().getHours()));
+  }
+  function tauntText() { return Taunts.line('idle', { ...tauntCtx(), mode: 'normal' }) || 'Your quests are waiting!'; }
 
   function comboText() {
     if (!Game.comboActive()) return '';
@@ -76,10 +95,20 @@
     return `⚡ Combo ×${d.combo} · next quest +${Math.round((Game.comboMult(d.combo + 1) - 1) * 100)}% XP · ${m}:${String(s).padStart(2, '0')} left`;
   }
 
+  let lastEnemyPct = null;
   function renderBattle() {
     const s = Game.state, d = s.day, p = Game.progress();
+    const card = $('#battle-card');
+    if (!card.querySelector('#arena-slot')) {
+      card.innerHTML = '<div id="battle-top"></div><div id="arena-slot"></div><div id="battle-info"></div>';
+      card.querySelector('#arena-slot').appendChild(Arena.mount());
+    }
+    Arena.update(s);
     const hp = Math.round(d.enemy.maxHp * (1 - p.pct));
     const defeated = p.met;
+    const pct = (1 - p.pct) * 100;
+    const startPct = lastEnemyPct == null ? pct : lastEnemyPct;
+    lastEnemyPct = pct;
     const meter = (label, icon, got, need) => {
       if (!need) return '';
       const ok = got >= need;
@@ -89,22 +118,17 @@
     const head = d.rest
       ? '<span class="rest-tag">😴 REST DAY</span>'
       : defeated ? '<span class="defeated-tag">DEFEATED</span>' : `<span class="enemy-atk" title="Damage you take tonight if the goal isn't met">⚔️ hits for ${d.enemy.attack}</span>`;
-    $('#battle-card').innerHTML = `
+    card.querySelector('#battle-top').innerHTML = `
       <div class="battle-head"><span class="eyebrow">Today's enemy</span>${head}</div>
-      ${s.motivation.why ? `<div class="why-quote">💭 <span>“${esc(s.motivation.why)}”</span></div>` : ''}
-      <div class="battle-row">
-        <div class="enemy-wrap">
-          <div class="speech">${esc(taunt())}</div>
-          <div class="enemy-art ${defeated && !d.rest ? 'is-defeated' : ''}" id="enemy-art">${Art.enemy(d.enemy.tier, { sleeping: d.rest })}</div>
-        </div>
-        <div class="enemy-info">
-          <div class="enemy-name">${esc(d.enemy.name)}</div>
-          <div class="bar-label"><span>Enemy HP</span><span>${hp} / ${d.enemy.maxHp}</span></div>
-          <div class="bar enemy-bar"><div class="fill" style="width:${((1 - p.pct) * 100).toFixed(1)}%"></div></div>
-          <div class="goals">
-            ${meter('Workouts', '🏋️', p.workouts, d.req.workouts)}
-            ${meter('Tasks', '📜', p.tasks, d.req.tasks)}
-          </div>
+      ${s.motivation.why ? `<div class="why-quote">💭 <span>“${esc(s.motivation.why)}”</span></div>` : ''}`;
+    card.querySelector('#battle-info').innerHTML = `
+      <div class="enemy-info arena-info">
+        <div class="enemy-name">${esc(d.enemy.name)}</div>
+        <div class="bar-label"><span>Enemy HP</span><span>${hp} / ${d.enemy.maxHp}</span></div>
+        <div class="bar enemy-bar"><div class="fill" id="enemy-fill" style="width:${startPct.toFixed(1)}%"></div></div>
+        <div class="goals">
+          ${meter('Workouts', '🏋️', p.workouts, d.req.workouts)}
+          ${meter('Tasks', '📜', p.tasks, d.req.tasks)}
         </div>
       </div>
       <div class="combo-meter" id="combo-meter" ${comboText() ? '' : 'hidden'}>${comboText()}</div>
@@ -114,6 +138,11 @@
       </div>
       ${d.rest ? restBox(p) : stakesBox()}
       <button class="btn ${Game.hasMotivation() ? 'btn-ghost' : 'btn-primary'} btn-block-sm" id="reasons-btn">${Game.hasMotivation() ? '✏️ My reasons & rewards' : '🎯 Set your reason, rewards & forfeit'}</button>`;
+    if (startPct !== pct) {
+      // Drain the bar smoothly once the attack lands.
+      const delay = Arena.isBusy() ? 450 : 30;
+      setTimeout(() => { const f = document.getElementById('enemy-fill'); if (f) f.style.width = pct.toFixed(1) + '%'; }, delay);
+    }
   }
 
   function restBox(p) {
@@ -646,6 +675,8 @@
           </div>
           <small class="muted">${notifState === 'unsupported' ? 'This browser does not support notifications.' : notifState === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser settings.' : 'Works while the app is open or running in the background. Install the app for the best results.'}</small>
         </div>
+        <label class="field"><span>💬 Enemy taunts</span>
+          <select id="taunt-mode">${[['off', 'Off'], ['normal', 'Normal'], ['savage', '🔥 Savage (harsh and personal)']].map(([v, l]) => `<option value="${v}" ${(st.taunts || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <div class="field"><span>Real-life motivation</span><div><button class="btn btn-ghost" id="reasons-btn2">🎯 Edit reason, rewards & forfeit</button></div></div>
       </div>
       <div class="card" id="sync-card">
@@ -697,7 +728,7 @@
     const fn = queue.shift();
     if (!fn) { showing = false; return; }
     showing = true;
-    fn(() => nextModal());
+    Arena.whenIdle().then(() => fn(() => nextModal()));
   }
 
   function toast(text, cls = '', ms = 2600) {
@@ -768,8 +799,13 @@
         floatText(anchor, `${ev.crit ? '💥 ' : ''}+${ev.amount} XP`, ev.crit ? 'xp crit' : 'xp');
         setTimeout(() => floatText(anchor, `+${ev.gold} 🪙`, 'gold-float', 26), 150);
         animate($('#hero-art'), 'attack');
-        animate($('#enemy-art'), 'hit');
-        floatText($('#enemy-art'), `-${ev.damage}`, ev.crit ? 'dmg crit' : 'dmg', 10);
+        lastActivity = Date.now();
+        const willDefeat = events.some(e => e.type === 'defeat');
+        Arena.attack({ damage: ev.damage, crit: ev.crit, combo: ev.combo }).then(() => {
+          if (willDefeat) return;
+          const p = Game.progress();
+          speak(ev.crit ? 'crit' : ev.combo >= 3 ? 'combo' : p.pct >= 0.66 ? 'nervous' : 'hit');
+        });
         if (ev.healed) setTimeout(() => floatText($('#hero-art'), `+${ev.healed} HP`, 'heal'), 300);
         if (ev.speed) setTimeout(() => toast('⚡ Speed bonus! +25% XP for finishing fast', 'gold'), 200);
         if (ev.secondWind) toast('🌬️ Second Wind! First quest of the day: ×1.5 XP, double damage', 'gold');
@@ -790,11 +826,13 @@
         delay += 600;
         setTimeout(() => { Sound.play('achievement'); achievementToast(ev.ach); }, delay);
       } else if (ev.type === 'defeat') {
+        Arena.defeat(ev.enemy.tier, ev.rest).then(() => { speak(ev.rest ? 'sleeping' : 'beaten'); renderBattle(); });
         const m = Game.state.motivation;
         const reward = m.dailyReward ? `<div class="real-reward">🎁 Real-life reward unlocked:<b>${esc(m.dailyReward)}</b></div>` : '';
         if (ev.rest) lootModal({ burst: '😴', title: 'Rest day complete!', extra: reward, intro: `Your streak continues. You found <b>${ev.gold} gold</b> while resting.`, sound: 'victory' });
         else lootModal({ burst: '🏆', title: 'Enemy defeated!', extra: reward, intro: `You beat the <b>${esc(ev.enemy.name)}</b> and got <b>${ev.gold} gold</b>. It also dropped:`, item: ev.item, autoEquip: ev.autoEquip, sound: 'victory' });
       } else if (ev.type === 'monster') {
+        Arena.monster(ev.monster.tier);
         if (ev.item) lootModal({ burst: '👾', title: 'Wandering monster defeated!', intro: `You beat the <b>${esc(ev.monster.name)}</b> that was following you. It dropped:`, item: ev.item, autoEquip: ev.autoEquip, sound: 'victory' });
         else lootModal({ burst: '👾', title: 'Wandering monster defeated!', intro: `You beat the <b>${esc(ev.monster.name)}</b> and found a pouch with <b>${ev.gold} gold</b>!`, sound: 'victory' });
       } else if (ev.type === 'bossDefeat') {
@@ -1212,7 +1250,7 @@
     Game.setSetting('lastReminded', today);
     const p = Game.progress(), d = s.day;
     const left = Math.max(0, d.req.workouts - p.workouts) + Math.max(0, d.req.tasks - p.tasks);
-    notify(`⚔️ The ${d.enemy.name} is still standing!`, `“${taunt()}” — ${left} quest${left === 1 ? '' : 's'} left to beat it before midnight.`);
+    notify(`⚔️ The ${d.enemy.name} is still standing!`, `“${tauntText()}” — ${left} quest${left === 1 ? '' : 's'} left to beat it before midnight.`);
   }
 
   /* ================= onboarding ================= */
@@ -1416,6 +1454,7 @@
     $('#tab-journey').addEventListener('change', async (e) => {
       if (e.target.id === 'import-input' && e.target.files[0]) importFile(e.target.files[0]);
       if (e.target.id === 'rest-day') { Game.setSetting('restDay', e.target.value === '' ? null : Number(e.target.value)); toast(e.target.value === '' ? 'No rest day' : '😴 Rest day saved — starts from the next one'); }
+      if (e.target.id === 'taunt-mode') { Game.setSetting('taunts', e.target.value); if (e.target.value === 'off') Arena.hideBubble(); else greet(); toast(e.target.value === 'off' ? '🤐 Taunts off' : e.target.value === 'savage' ? '🔥 Savage taunts on. You asked for it.' : '💬 Taunts on'); }
       if (e.target.id === 'remind-time') Game.setSetting('reminderTime', e.target.value || '18:00');
       if (e.target.id === 'remind-on') {
         if (e.target.checked) {
@@ -1448,12 +1487,16 @@
         if (cm) { cm.textContent = t; cm.hidden = !t; }
         if (comboWas && !t) toast('⚡ Combo ended');
         document.querySelectorAll('[data-speed]').forEach(el => { el.textContent = speedText(+el.dataset.speed); });
+        const mode = Game.state.settings.taunts || 'normal';
+        const idleMs = (mode === 'savage' ? 5 : 10) * 60 * 1000, now = Date.now();
+        if (mode !== 'off' && !document.hidden && !$('#modal-root').children.length && !Arena.isBusy() && !Game.state.day.rest && !Game.progress().met
+          && now - lastActivity > idleMs && now - lastTauntAt > idleMs) speak(Game.stakes().knockout ? 'cocky' : 'idle');
         comboWas = !!t;
       }
       const key = Game.todayKey();
       if (key !== lastKey) { lastKey = key; tick(); }
     }, 1000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); if (Game.state && Date.now() - lastTauntAt > 30 * 60 * 1000) greet(); } });
   }
 
   function boot() {
@@ -1465,6 +1508,8 @@
     handleEvents(Game.checkAchievements());
     linkWorkoutsModal();
     checkReminder();
+    lastActivity = Date.now();
+    setTimeout(greet, 900);
   }
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
