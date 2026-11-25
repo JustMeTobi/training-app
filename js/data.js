@@ -333,3 +333,23 @@ const QUICK_QUESTS = [
 ];
 const QUICK_TIMES = { 2: { label: '2 min', icon: '⚡', xp: 15 }, 5: { label: '5 min', icon: '⏱️', xp: 25 }, 15: { label: '15 min', icon: '🕐', xp: 45 } };
 const QUICK_FULL_PER_DAY = 5;
+
+/* ---------- v5: exercise tracking for custom workouts ---------- */
+/* Words that identify a known exercise in a quest title (lowercase, spaces/hyphens ignored). */
+const EXERCISE_ALIASES = {
+  pushups:  ['pushup', 'pressup', 'armhævning', 'armhaevning'],
+  squats:   ['squat', 'knæbøj', 'knaeboej'],
+  situps:   ['situp', 'crunch', 'mavebøj', 'mavebøjning'],
+  plank:    ['plank', 'planke'],
+  lunges:   ['lunge', 'udfald'],
+  jacks:    ['jumpingjack', 'sprællemand', 'spraellemand'],
+  burpees:  ['burpee'],
+  climbers: ['mountainclimber', 'climber', 'bjergbestiger'],
+  bridges:  ['glutebridge', 'bridge', 'hoftebro'],
+  wallsit:  ['wallsit', 'vægsid', 'vaegsid'],
+  walk:     ['walk', 'run', 'jog', 'gå', 'løb', 'tur'],
+  stretch:  ['stretch', 'yoga', 'udstræk', 'stræk'],
+  superman: ['superman'],
+  calves:   ['calfraise', 'calf', 'tåhæv', 'lægge'],
+};
+const CUSTOM_UNITS = ['reps', 'sec', 'min', 'km', 'times'];

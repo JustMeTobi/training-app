@@ -223,6 +223,7 @@
     if (q.timer) actions.push(`<button class="q-action" data-timer="${q.key}" title="Start a ${fmtSecs(q.timer)} timer" aria-label="Start timer for ${esc(q.title)}">⏱️</button>`);
     if (q.generated && d.swaps > 0) actions.push(`<button class="q-action" data-swap="${q.key}" title="Swap for a different workout (1 per day)" aria-label="Swap ${esc(q.title)}">🔄</button>`);
     if (q.quick) actions.push(`<button class="q-action del" data-unquick="${q.quickId}" title="Remove this Quick Quest" aria-label="Remove ${esc(q.title)}">✖</button>`);
+    if (editingTasks && !q.generated && !q.challenge && !q.quick) actions.push(`<button class="q-action" data-edit="${q.taskId}" aria-label="Edit ${esc(q.title)}">✏️</button>`);
     if (editingTasks && !q.generated && !q.challenge && !q.quick) actions.push(`<button class="q-action del" data-del="${q.taskId}" aria-label="Delete ${esc(q.title)}">🗑️</button>`);
     return `<li class="quest ${q.challenge ? 'challenge' : ''} ${q.quick ? 'quick' : ''}" data-key="${q.key}">
       <button class="quest-btn" data-complete="${q.key}" aria-label="Complete ${esc(q.title)}">
@@ -283,10 +284,47 @@
       </div>` : ''}`;
   }
 
+  /* Exercise + amount fields shared by the add form, edit popup and link popup. */
+  function exerciseFields(prefix, exId, amount, { required = false } = {}) {
+    const ex = exId ? Game.exerciseInfo(exId) : null;
+    const opts = Game.allExercises().map(x => `<option value="${x.id}" ${x.id === exId ? 'selected' : ''}>${x.icon} ${esc(x.name)} (${x.unit})</option>`).join('');
+    return `<div class="field-row ex-fields" data-prefix="${prefix}">
+      <label class="field"><span>Exercise <small class="muted">(counts in your stats)</small></span>
+        <select name="${prefix}exId" class="ex-select">${required ? '' : '<option value="">— Not tracked —</option>'}${opts}<option value="other" ${exId === 'other' ? 'selected' : ''}>➕ Other…</option></select></label>
+      <label class="field field-narrow"><span>Amount <small class="muted ex-unit">${ex ? ex.unit : ''}</small></span>
+        <input name="${prefix}amount" type="number" inputmode="decimal" min="0" step="any" value="${amount ?? ''}" placeholder="e.g. 30"></label>
+    </div>
+    <div class="field-row ex-other" data-prefix="${prefix}" ${exId === 'other' ? '' : 'hidden'}>
+      <label class="field"><span>Exercise name</span><input name="${prefix}customName" maxlength="40" placeholder="e.g. Pull-ups"></label>
+      <label class="field field-narrow"><span>Unit</span><select name="${prefix}customUnit">${CUSTOM_UNITS.map(u => `<option>${u}</option>`).join('')}</select></label>
+    </div>`;
+  }
+  function readExercise(fd, prefix = '') {
+    return { exId: fd.get(prefix + 'exId') || null, amount: fd.get(prefix + 'amount'), customName: fd.get(prefix + 'customName'), customUnit: fd.get(prefix + 'customUnit') };
+  }
+  /* Keep unit label and "Other…" fields in sync with the exercise dropdown. */
+  function syncExerciseFields(root) {
+    root.querySelectorAll('.ex-fields').forEach(row => {
+      const sel = row.querySelector('.ex-select'), other = root.querySelector(`.ex-other[data-prefix="${row.dataset.prefix}"]`);
+      const info = sel.value && sel.value !== 'other' ? Game.exerciseInfo(sel.value) : null;
+      row.querySelector('.ex-unit').textContent = info ? info.unit : sel.value === 'other' ? '' : '';
+      if (other) other.hidden = sel.value !== 'other';
+    });
+  }
+  function applyDetection(form, prefix, title) {
+    const d = Game.detectExercise(title);
+    const sel = form.querySelector(`[name="${prefix}exId"]`), amt = form.querySelector(`[name="${prefix}amount"]`);
+    if (!sel || sel.dataset.touched) return;
+    if (d.exId) sel.value = d.exId;
+    if (d.customName) { const n = form.querySelector(`[name="${prefix}customName"]`); if (n) n.value = d.customName; const un = form.querySelector(`[name="${prefix}customUnit"]`); if (un) un.value = d.customUnit; }
+    if (d.amount != null && !amt.dataset.touched) amt.value = d.amount;
+    syncExerciseFields(form);
+  }
+
   function addForm() {
     return `<form class="add-form card" id="add-form" autocomplete="off">
       <label class="field"><span>What do you want to do?</span>
-        <input name="title" maxlength="80" placeholder="e.g. Meditate 10 minutes" required></label>
+        <input name="title" maxlength="80" placeholder="e.g. 30 push-ups or Meditate 10 minutes" required></label>
       <div class="field-row">
         <label class="field"><span>Type</span>
           <select name="kind"><option value="task">📜 Task</option><option value="workout">🏋️ Workout</option></select></label>
@@ -295,6 +333,7 @@
         <label class="field"><span>Repeat</span>
           <select name="repeat"><option value="daily">Every day</option><option value="once">Today only</option></select></label>
       </div>
+      <div id="add-ex" hidden>${exerciseFields('', null, null)}<p class="muted tiny ex-hint">💡 Pick the exercise and amount so your reps count in your stats. Typing "40 push-ups" fills this in for you.</p></div>
       <button class="btn btn-primary" type="submit">Add quest</button>
     </form>`;
   }
@@ -554,8 +593,8 @@
     }
     const nr = Game.nextRank(info.level);
     const reps = Object.entries(s.stats.reps).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).map(([id, n]) => {
-      const w = WORKOUTS.find(x => x.id === id);
-      return w ? `<li><span>${w.icon} ${w.name}</span><b>${fmt(n)} ${w.unit.replace(' / leg', '')}</b></li>` : '';
+      const w = Game.exerciseInfo(id);
+      return w ? `<li><span>${w.icon} ${esc(w.name)}</span><b>${fmt(n)} ${w.unit.replace(' / leg', '')}</b></li>` : '';
     }).join('');
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const st = s.settings;
@@ -582,6 +621,7 @@
         </div>
         <h3 class="sub mt">Lifetime totals</h3>
         ${reps ? `<ul class="reps">${reps}</ul>` : '<p class="muted">Complete workouts to see your lifetime totals, like “You\'ve done 2,340 push-ups!”</p>'}
+        <button class="btn btn-ghost btn-small mt" id="add-reps">➕ Add missing reps</button>
       </div>
       <div class="card">
         <div class="section-head"><h2>🗺️ Level road</h2>${nr ? `<span class="chip">Next rank: ${nr.title} at Lv ${nr.level}</span>` : ''}</div>
@@ -665,7 +705,9 @@
     el.className = `toast ${cls}`;
     el.style.setProperty('--ms', ms + 'ms');
     if (typeof text === 'string') el.textContent = text; else el.appendChild(text);
-    $('#toast-root').appendChild(el);
+    const root = $('#toast-root');
+    root.appendChild(el);
+    while (root.children.length > 3) root.firstElementChild.remove();
     setTimeout(() => el.remove(), ms);
   }
   function achievementToast(a) {
@@ -879,6 +921,83 @@
         <div class="chest-reveal">${content}${res.item ? lootBlock(res.item) + (res.autoEquip ? '<p class="muted">Equipped automatically!</p>' : '<p class="muted">Added to your backpack.</p>') : ''}</div>
         <div class="modal-actions"><button class="btn btn-primary" data-close>Nice!</button></div>`, { onClose: () => { renderAll(); done(); handleEvents(res.events); } });
       void m;
+    });
+  }
+
+  /* ---------- editing custom quests & exercise tracking ---------- */
+  function editTaskModal(id) {
+    const t = Game.state.tasks.find(x => x.id === id);
+    if (!t) return;
+    const md = modal(`
+      <div class="modal-burst">✏️</div>
+      <h2>Edit quest</h2>
+      <form id="edit-form" autocomplete="off">
+        <label class="field"><span>Name</span><input name="title" maxlength="80" value="${esc(t.title)}" required></label>
+        <label class="field"><span>Effort</span><select name="effort">${Object.entries(EFFORTS).map(([k, e]) => `<option value="${k}" ${k === t.effort ? 'selected' : ''}>${e.label} (${e.xp} base XP)</option>`).join('')}</select></label>
+        ${t.kind === 'workout' ? exerciseFields('', t.exId, t.amount) + '<p class="muted tiny">Changing the amount applies from now on. Today\'s finished quest keeps its old amount.</p>' : ''}
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" type="submit">Save</button></div>
+      </form>`, { onClose: renderAll });
+    const form = md.root.querySelector('#edit-form');
+    form.addEventListener('change', (e) => { if (e.target.classList.contains('ex-select')) syncExerciseFields(form); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = new FormData(form);
+      Game.updateTask(id, { title: f.get('title'), effort: f.get('effort'), ...(t.kind === 'workout' ? readExercise(f) : {}) });
+      Sound.play('loot'); md.close(); toast('✏️ Quest updated');
+    });
+  }
+
+  /* One-time popup: connect workouts added before tracking existed to an exercise. */
+  function linkWorkoutsModal() {
+    const list = Game.unlinkedWorkouts();
+    if (!list.length) return;
+    enqueueModal((done) => {
+      const rows = list.map(t => {
+        const d = Game.detectExercise(t.title);
+        return `<div class="link-row"><b>🏋️ ${esc(t.title)}</b>${exerciseFields(t.id + '_', d.exId, d.amount)}</div>`;
+      }).join('');
+      const md = modal(`
+        <div class="modal-burst">📊</div>
+        <h2>Count your own workouts in your stats</h2>
+        <p class="muted">Your own workouts can now count toward your lifetime totals, hero stats and achievements. Check the exercise and fill in how much you do each time.</p>
+        <form id="link-form" autocomplete="off">${rows}
+          <div class="modal-actions"><button type="button" class="btn btn-ghost" id="link-skip">Don't track these</button><button class="btn btn-primary" type="submit">Save</button></div>
+        </form>`, { dismissable: false, onClose: () => { renderAll(); done(); } });
+      const form = md.root.querySelector('#link-form');
+      list.forEach(t => {
+        const d = Game.detectExercise(t.title);
+        if (d.customName) { form.querySelector(`[name="${t.id}_exId"]`).value = 'other'; form.querySelector(`[name="${t.id}_customName"]`).value = d.customName; form.querySelector(`[name="${t.id}_customUnit"]`).value = d.customUnit; }
+      });
+      syncExerciseFields(form);
+      form.addEventListener('change', (e) => { if (e.target.classList.contains('ex-select')) syncExerciseFields(form); });
+      md.root.querySelector('#link-skip').addEventListener('click', () => { Game.dismissLinking(); md.close(); });
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const f = new FormData(form);
+        list.forEach(t => Game.updateTask(t.id, readExercise(f, t.id + '_')));
+        Sound.play('loot'); md.close(); toast('📊 Your workouts now count in your stats');
+      });
+    });
+  }
+
+  function addRepsModal() {
+    const md = modal(`
+      <div class="modal-burst">➕</div>
+      <h2>Add missing reps</h2>
+      <p class="muted">Did a workout that wasn't counted? Add it to your lifetime totals here.</p>
+      <form id="reps-form" autocomplete="off">
+        ${exerciseFields('', 'pushups', null, { required: true })}
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" type="submit">Add</button></div>
+      </form>`, { onClose: renderAll });
+    const form = md.root.querySelector('#reps-form');
+    form.addEventListener('change', (e) => { if (e.target.classList.contains('ex-select')) syncExerciseFields(form); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = new FormData(form);
+      const { exId, amount } = Game.resolveExercise(readExercise(f));
+      if (!exId || !Game.addReps(exId, amount)) { Sound.play('error'); toast('Enter an amount above 0.'); return; }
+      const info = Game.exerciseInfo(exId);
+      Sound.play('coin'); md.close(); toast(`➕ Added ${amount} ${info.unit} of ${info.name}`);
     });
   }
 
@@ -1189,6 +1308,8 @@
       }
       const u = e.target.closest('[data-undo]');
       if (u) { Sound.play('undo'); Game.undo(u.dataset.undo); renderAll(); toast('↩️ Quest marked as not done'); return; }
+      const ed = e.target.closest('[data-edit]');
+      if (ed) { editTaskModal(ed.dataset.edit); return; }
       const d = e.target.closest('[data-del]');
       if (d) {
         const t = Game.state.tasks.find(x => x.id === d.dataset.del);
@@ -1198,11 +1319,27 @@
       if (e.target.closest('#add-toggle')) { addOpen = !addOpen; renderQuests(); if (addOpen) $('#add-form input').focus(); return; }
       if (e.target.closest('#edit-toggle')) { editingTasks = !editingTasks; renderQuests(); }
     });
+    $('#tab-quests').addEventListener('input', (e) => {
+      const form = e.target.closest('#add-form');
+      if (!form) return;
+      if (e.target.name === 'title' && form.kind.value !== 'workout') {
+        const d = Game.detectExercise(e.target.value);
+        if (d.exId) { form.kind.value = 'workout'; form.querySelector('#add-ex').hidden = false; }
+      }
+      if (e.target.name === 'title') applyDetection(form, '', e.target.value);
+      if (e.target.name === 'amount') e.target.dataset.touched = '1';
+    });
+    $('#tab-quests').addEventListener('change', (e) => {
+      const form = e.target.closest('#add-form');
+      if (!form) return;
+      if (e.target.name === 'kind') { form.querySelector('#add-ex').hidden = e.target.value !== 'workout'; if (e.target.value === 'workout') applyDetection(form, '', form.title.value); }
+      if (e.target.classList.contains('ex-select')) { e.target.dataset.touched = '1'; syncExerciseFields(form); }
+    });
     $('#tab-quests').addEventListener('submit', (e) => {
       if (e.target.id !== 'add-form') return;
       e.preventDefault();
       const f = new FormData(e.target);
-      const t = Game.addTask({ title: f.get('title'), effort: f.get('effort'), kind: f.get('kind'), repeat: f.get('repeat') });
+      const t = Game.addTask({ title: f.get('title'), effort: f.get('effort'), kind: f.get('kind'), repeat: f.get('repeat'), ...readExercise(f) });
       if (t) { toast(`📜 New quest: ${t.title}`); addOpen = false; renderAll(); }
     });
 
@@ -1262,6 +1399,7 @@
         return;
       }
       if (e.target.closest('#reasons-btn2')) { reasonsModal(); return; }
+      if (e.target.closest('#add-reps')) { addRepsModal(); return; }
       if (e.target.closest('#copy-code')) { copyCode(); return; }
       if (e.target.closest('#paste-code')) { pasteCode(); return; }
       if (e.target.closest('#export-file')) { exportFile(); return; }
@@ -1325,6 +1463,7 @@
     switchTab(currentTab);
     showReport(report);
     handleEvents(Game.checkAchievements());
+    linkWorkoutsModal();
     checkReminder();
   }
 

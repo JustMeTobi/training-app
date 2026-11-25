@@ -294,11 +294,16 @@ const Game = (() => {
       detail: `${w.amount} ${w.unit}`, xp: w.xp, generated: true, timer: timerSeconds(w.unit, w.amount),
     }));
     for (const t of state.tasks) {
+      const ex = t.kind === 'workout' && t.exId ? exerciseInfo(t.exId) : null;
+      const amt = ex && t.amount ? `${t.amount} ${ex.unit} · ` : '';
       list.push({
-        key: 't:' + t.id, taskId: t.id, kind: t.kind, title: t.title, attr: t.kind === 'workout' ? 'end' : 'dis',
-        icon: t.forfeit ? '⚖️' : t.kind === 'workout' ? '🏋️' : '📜',
-        detail: `${EFFORTS[t.effort].label}${t.repeat === 'once' ? ' · today only' : ''}`,
-        xp: effortXP(t.effort, d.level, diff), generated: false, timer: 0,
+        key: 't:' + t.id, taskId: t.id, kind: t.kind, title: t.title,
+        attr: ex ? ex.attr : t.kind === 'workout' ? 'end' : 'dis',
+        exId: ex && t.amount ? ex.id : undefined, amount: ex && t.amount ? t.amount : undefined,
+        icon: t.forfeit ? '⚖️' : t.kind === 'workout' ? (ex && WORKOUTS.some(w => w.id === ex.id) ? ex.icon : '🏋️') : '📜',
+        detail: `${amt}${EFFORTS[t.effort].label}${t.repeat === 'once' ? ' · today only' : ''}`,
+        xp: effortXP(t.effort, d.level, diff), generated: false,
+        timer: ex && t.amount ? timerSeconds(ex.unit, t.amount) : 0,
       });
     }
     return list.map(q => ({ ...q, done: !!d.done[q.key], awarded: d.done[q.key]?.xp, crit: d.done[q.key]?.crit }));
@@ -404,7 +409,7 @@ const Game = (() => {
     addGold(gold);
     state.stats[q.kind === 'workout' ? 'workouts' : 'tasks']++;
     state.attrs[q.attr] = (state.attrs[q.attr] || 0) + 1;
-    if (q.exId) state.stats.reps[q.exId] = (state.stats.reps[q.exId] || 0) + q.amount;
+    if (q.exId && q.amount) state.stats.reps[q.exId] = Math.round(((state.stats.reps[q.exId] || 0) + q.amount) * 10) / 10;
     if (crit) state.stats.crits++;
     if (viaTimer) state.stats.timers++;
     if (q.challenge) state.stats.challenges++;
@@ -497,7 +502,7 @@ const Game = (() => {
     const k = e.kind === 'workout' ? 'workouts' : 'tasks';
     state.stats[k] = Math.max(0, state.stats[k] - 1);
     if (e.attr) state.attrs[e.attr] = Math.max(0, (state.attrs[e.attr] || 0) - 1);
-    if (e.exId) state.stats.reps[e.exId] = Math.max(0, (state.stats.reps[e.exId] || 0) - (e.amount || 0));
+    if (e.exId) state.stats.reps[e.exId] = Math.max(0, Math.round(((state.stats.reps[e.exId] || 0) - (e.amount || 0)) * 10) / 10);
     if (e.crit) state.stats.crits = Math.max(0, state.stats.crits - 1);
     if (e.timer) state.stats.timers = Math.max(0, state.stats.timers - 1);
     if (e.challenge) state.stats.challenges = Math.max(0, state.stats.challenges - 1);
@@ -544,13 +549,83 @@ const Game = (() => {
     return res;
   }
 
-  function addTask({ title, effort, kind, repeat }) {
+  /* ---------- exercises (built-in + user-made) ---------- */
+  function exerciseInfo(exId) {
+    const w = WORKOUTS.find(x => x.id === exId);
+    if (w) return { id: w.id, name: w.name, unit: w.unit, attr: w.attr, icon: w.icon };
+    const c = state.customExercises[exId];
+    if (c) return { id: exId, name: c.name, unit: c.unit, attr: c.attr, icon: '🏋️' };
+    return null;
+  }
+  function allExercises() {
+    return [...WORKOUTS.map(w => exerciseInfo(w.id)), ...Object.keys(state.customExercises).map(exerciseInfo)];
+  }
+  /* Find or create a user-made exercise like "Pull-ups (reps)". */
+  function customExercise(name, unit) {
+    name = String(name || '').trim().slice(0, 40);
+    if (!name) return null;
+    unit = CUSTOM_UNITS.includes(unit) ? unit : 'reps';
+    const found = Object.entries(state.customExercises).find(([, c]) => c.name.toLowerCase() === name.toLowerCase() && c.unit === unit);
+    if (found) return found[0];
+    const id = 'c_' + uid();
+    state.customExercises[id] = { name, unit, attr: unit === 'reps' || unit === 'times' ? 'str' : 'end' };
+    return id;
+  }
+  /* Guess exercise + amount from a title like "40 push-ups" or "Plank 60 sec". */
+  function detectExercise(title) {
+    const raw = String(title || '').toLowerCase();
+    const flat = raw.replace(/[\s\-_]/g, '');
+    let exId = null;
+    for (const [id, words] of Object.entries(EXERCISE_ALIASES)) if (words.some(wd => flat.includes(wd))) { exId = id; break; }
+    if (!exId) for (const [id, c] of Object.entries(state.customExercises)) if (flat.includes(c.name.toLowerCase().replace(/[\s\-_]/g, ''))) { exId = id; break; }
+    const m = raw.match(/(\d+(?:[.,]\d+)?)/);
+    const amount = m ? Math.round(parseFloat(m[1].replace(',', '.')) * 10) / 10 : null;
+    // A distance ("5 km") doesn't fit an exercise counted in minutes: suggest a km exercise instead.
+    if (/\d\s*km\b|\bkm\b/.test(raw) && (!exId || exerciseInfo(exId).unit !== 'km')) {
+      const name = String(title).replace(/\d+(?:[.,]\d+)?/g, '').replace(/\bkm\b/gi, '').replace(/\s+/g, ' ').trim() || 'Running';
+      const existing = Object.entries(state.customExercises).find(([, c]) => c.unit === 'km' && c.name.toLowerCase() === name.toLowerCase());
+      return existing ? { exId: existing[0], amount } : { exId: 'other', amount, customName: name[0].toUpperCase() + name.slice(1), customUnit: 'km' };
+    }
+    return { exId, amount };
+  }
+  function cleanAmount(a) { const n = Math.round(parseFloat(String(a).replace(',', '.')) * 10) / 10; return n > 0 && n < 100000 ? n : null; }
+  /* Resolve form fields into { exId, amount } (exId may be "other" → new custom exercise). */
+  function resolveExercise({ exId, amount, customName, customUnit }) {
+    if (!exId) return { exId: null, amount: null };
+    if (exId === 'other') exId = customExercise(customName, customUnit);
+    if (!exId || !exerciseInfo(exId)) return { exId: null, amount: null };
+    return { exId, amount: cleanAmount(amount) };
+  }
+
+  function addTask({ title, effort, kind, repeat, exId, amount, customName, customUnit }) {
     title = String(title || '').trim().slice(0, 80);
     if (!title) return null;
     const t = { id: uid(), title, effort: EFFORTS[effort] ? effort : 'medium', kind: kind === 'workout' ? 'workout' : 'task', repeat: repeat === 'once' ? 'once' : 'daily', day: todayKey() };
+    if (t.kind === 'workout') Object.assign(t, resolveExercise({ exId, amount, customName, customUnit }), { linkAsked: true });
     state.tasks.push(t);
     save();
     return t;
+  }
+  function updateTask(id, patch) {
+    const t = state.tasks.find(x => x.id === id);
+    if (!t) return null;
+    if (patch.title != null && String(patch.title).trim()) t.title = String(patch.title).trim().slice(0, 80);
+    if (patch.effort && EFFORTS[patch.effort]) t.effort = patch.effort;
+    if (t.kind === 'workout' && 'exId' in patch) Object.assign(t, resolveExercise(patch));
+    t.linkAsked = true;
+    save();
+    return t;
+  }
+  /* Custom workouts made before exercise tracking existed. */
+  function unlinkedWorkouts() { return state.tasks.filter(t => t.kind === 'workout' && !t.exId && !t.linkAsked); }
+  function dismissLinking() { for (const t of unlinkedWorkouts()) t.linkAsked = true; save(); }
+  /* Manual correction for lifetime totals. */
+  function addReps(exId, amount) {
+    const info = exerciseInfo(exId), n = cleanAmount(amount);
+    if (!info || !n) return false;
+    state.stats.reps[exId] = Math.round(((state.stats.reps[exId] || 0) + n) * 10) / 10;
+    save();
+    return true;
   }
   function removeTask(id) {
     if (state.day.done['t:' + id]) return false;
@@ -702,6 +777,7 @@ const Game = (() => {
     s.attrs = { str: 0, end: 0, dis: 0, ...(s.attrs || {}) };
     s.stats = { workouts: 0, tasks: 0, enemies: 0, crits: 0, bosses: 0, chests: 0, potions: 0, challenges: 0, goldEarned: 0, maxCombo: 0, swaps: 0, timers: 0, earlyWins: 0, reps: {}, ...(s.stats || {}) };
     s.bestiary ??= {};
+    s.customExercises ??= {};
     s.achievements ??= {};
     s.look = { hair: 0, hairColor: 0, skin: 0, cape: null, pet: null, ...(s.look || {}) };
     s.settings = { restDay: null, reminders: false, reminderTime: '18:00', lastReminded: null, ...(s.settings || {}) };
@@ -788,6 +864,7 @@ const Game = (() => {
     gearBonus, gearStats, reforge, reforgePrice, setInfo, equippedItem, sellPrice, critChance, comboMult, comboActive, comboLeftMs,
     quests, challengeQuest, quickQuests, rollQuick, acceptQuick, removeQuick, quickFullLeft, payGold, progress, complete, undo, swapWorkout, openChest, addTask, removeTask, equip, discard,
     buy, shopPrice, usePotion, skillPoints, spendSkill, resetSkills, lookUnlocked, setLook, checkAchievements,
+    exerciseInfo, allExercises, resolveExercise, detectExercise, updateTask, unlinkedWorkouts, dismissLinking, addReps,
     stakes, setMotivation, hasMotivation, setSetting, ensureToday, start, load, reset, exportData, importData,
     setDifficulty, rename, workoutAmount,
   };

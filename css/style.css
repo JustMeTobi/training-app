@@ -583,3 +583,9 @@ body.shake { animation: shake .4s ease-out; }
 .quest.quick .quest-btn:hover { border-color: #a855f7; }
 .quest.done.quick { border-color: #6d28d9; }
 .speed { color: #d8b4fe; font-weight: 800; }
+
+/* ================= v5: exercise tracking ================= */
+.link-row { text-align: left; background: #0e0c22; border: 1px solid var(--line); border-radius: 12px; padding: .6rem .7rem .1rem; margin-bottom: .6rem; }
+.link-row > b { display: block; margin-bottom: .4rem; }
+.ex-hint { margin: -.3rem 0 .8rem; }
+.ex-fields .field-narrow { flex: 0 0 120px; }
