@@ -124,6 +124,7 @@ const SHOP = [
   { id: 'potion', name: 'Health potion', icon: '🧪', desc: 'Restores 40% of your HP.', price: () => 50 },
   { id: 'shield', name: 'Streak shield', icon: '🛡️', desc: 'Saves your streak once if you lose a day. Used automatically. Max 3.', price: () => 150, max: 3 },
   { id: 'crate',  name: 'Gear crate',    icon: '📦', desc: 'A random piece of gear for your level.', price: (lvl) => 120 + lvl * 10 },
+  { id: 'egg',    name: 'Mystery egg',   icon: '🥚', desc: 'A random pet egg you don\'t have yet. Hatches after 10 quests.', price: () => 600 },
   { id: 'epic',   name: 'Epic crate',    icon: '💎', desc: 'Guaranteed Epic or Legendary gear.', price: (lvl) => 450 + lvl * 20 },
 ];
 
@@ -168,11 +169,11 @@ const LOOKS = {
     { id: 'gold',    name: 'Golden Cape',  color: '#d97706', req: { level: 20 } },
   ],
   pets: [
-    { id: 'dog',    name: 'Puppy',       req: { level: 3 } },
-    { id: 'slime',  name: 'Pet Slime',   req: { ach: 'enemies_10' } },
-    { id: 'cat',    name: 'Cat',         req: { ach: 'streak_7' } },
-    { id: 'owl',    name: 'Owl',         req: { ach: 'tasks_100' } },
-    { id: 'dragon', name: 'Baby Dragon', req: { level: 25 } },
+    { id: 'dog',    name: 'Puppy' },
+    { id: 'slime',  name: 'Pet Slime' },
+    { id: 'cat',    name: 'Cat' },
+    { id: 'owl',    name: 'Owl' },
+    { id: 'dragon', name: 'Baby Dragon' },
   ],
 };
 
@@ -213,6 +214,10 @@ const ACHIEVEMENTS = [
   { id: 'bestiary_5',  icon: '📖', name: 'Monster Expert',   desc: 'Defeat 5 different monster types',   test: s => Object.keys(s.bestiary).length >= 5 },
   { id: 'pushups_1000',icon: '🦾', name: 'Push-up Pro',      desc: 'Do 1,000 push-ups in total',         test: s => (s.stats.reps.pushups || 0) >= 1000 },
   { id: 'potion_1',    icon: '🧪', name: 'Quick Fix',        desc: 'Drink a health potion',              test: s => s.stats.potions >= 1 },
+  { id: 'pet_1',       icon: '🐣', name: 'Hatchling',        desc: 'Hatch your first pet',               test: s => Object.values(s.pets || {}).some(p => p.status === 'hatched') },
+  { id: 'pet_max',     icon: '🐾', name: 'Best Friends',     desc: 'Raise a pet to level 10',            test: s => Object.values(s.pets || {}).some(p => p.level >= 10) },
+  { id: 'habit_bronze',icon: '🥉', name: 'Habit Forming',    desc: 'Get a habit to Bronze (7 times)',    test: s => Object.values(s.habits || {}).some(h => h.total >= 7) },
+  { id: 'habit_gold',  icon: '🥇', name: 'Creature of Habit', desc: 'Get a habit to Gold (100 times)',   test: s => Object.values(s.habits || {}).some(h => h.total >= 100) },
   { id: 'quick_10',    icon: '🎲', name: 'Side Quester',     desc: 'Complete 10 Quick Quests',           test: s => (s.stats.quick || 0) >= 10 },
   { id: 'quick_50',    icon: '🎰', name: 'Never Bored',      desc: 'Complete 50 Quick Quests',           test: s => (s.stats.quick || 0) >= 50 },
   { id: 'monster_1',   icon: '👾', name: 'Monster Ambush',   desc: 'Defeat a wandering monster',         test: s => (s.stats.monsters || 0) >= 1 },
@@ -353,3 +358,26 @@ const EXERCISE_ALIASES = {
   calves:   ['calfraise', 'calf', 'tåhæv', 'lægge'],
 };
 const CUSTOM_UNITS = ['reps', 'sec', 'min', 'km', 'times'];
+
+/* ---------- v7: pets, habits ---------- */
+/* Pets hatch from eggs you earn, then grow (max level 10) as you complete quests while they're with you. */
+const PETS = {
+  dog:    { name: 'Puppy',       icon: '🐶', egg: 'Reach a 3-day streak',           test: s => s.hero.bestStreak >= 3,           bonus: lv => ({ gold: lv }),                  bonusText: lv => `+${lv}% gold` },
+  slime:  { name: 'Pet Slime',   icon: '🟢', egg: 'Defeat a wandering monster',     test: s => (s.stats.monsters || 0) >= 1,     bonus: lv => ({ regen: Math.ceil(lv / 2) }),   bonusText: lv => `Heal ${Math.ceil(lv / 2)} HP per quest` },
+  cat:    { name: 'Cat',         icon: '🐱', egg: 'Reach a 7-day streak',           test: s => s.hero.bestStreak >= 7,           bonus: lv => ({ crit: lv * 0.5 }),            bonusText: lv => `+${lv * 0.5}% crit chance` },
+  owl:    { name: 'Owl',         icon: '🦉', egg: 'Complete 50 tasks',              test: s => s.stats.tasks >= 50,              bonus: lv => ({ taskXp: lv * 2 }),            bonusText: lv => `+${lv * 2}% XP from tasks` },
+  dragon: { name: 'Baby Dragon', icon: '🐲', egg: 'Defeat 3 weekly bosses',         test: s => s.stats.bosses >= 3,              bonus: lv => ({ power: lv * 3 }),             bonusText: lv => `+${lv * 3}% boss damage` },
+};
+const PET_HATCH = 10;          // quests needed to hatch an egg
+const PET_MAX_LEVEL = 10;
+const petXpNeed = (lv) => 4 + lv * 3;
+
+/* Your own habits level up with total completions. */
+const HABIT_LEVELS = [
+  { n: 0,   name: 'New',     icon: '🌱' },
+  { n: 7,   name: 'Bronze',  icon: '🥉' },
+  { n: 30,  name: 'Silver',  icon: '🥈' },
+  { n: 100, name: 'Gold',    icon: '🥇' },
+  { n: 365, name: 'Diamond', icon: '💎' },
+];
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

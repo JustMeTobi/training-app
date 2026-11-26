@@ -147,7 +147,8 @@ const Art = (() => {
     if (helmet) s += drawHelmet(helmet);
     if (shield) s += drawShield(shield);
     if (weapon) s += drawWeapon(weapon) + r(43, 50, 6, 5, skin) + r(43, 52, 6, 1, '#000', 'opacity=".18"');
-    if (look.pet) s += pet(look.pet);
+    const petData = look.pet && state.pets ? state.pets[look.pet] : null;
+    if (look.pet && (!state.pets || (petData && petData.status === 'hatched'))) s += pet(look.pet, petData ? petData.level : 1);
     return `<svg viewBox="-16 0 96 80" class="hero-svg" shape-rendering="crispEdges" role="img" aria-label="Your character">${s}</svg>`;
   }
 
@@ -164,13 +165,16 @@ const Art = (() => {
   }
 
   /* Small companion drawn next to the hero (left side). */
-  function pet(id) {
-    let p = '<g class="pet">';
+  function pet(id, lv = 1) {
+    // Pets grow at level 5 and get a little crown at level 10.
+    const scale = lv >= 10 ? 1.3 : lv >= 5 ? 1.15 : 1;
+    let p = `<g class="pet" transform="translate(-8 76) scale(${scale}) translate(8 -76)">`;
     if (id === 'dog') p += r(-13, 66, 12, 7, '#c08a4e') + r(-15, 62, 6, 6, '#c08a4e') + r(-16, 61, 2, 4, '#7a4f25') + r(-12, 63, 1, 1, '#111') + r(-12, 73, 2, 3, '#7a4f25') + r(-4, 73, 2, 3, '#7a4f25') + r(-1, 64, 2, 4, '#c08a4e');
     else if (id === 'cat') p += r(-13, 67, 11, 6, '#6b7280') + r(-15, 62, 7, 6, '#6b7280') + `<path d="M-15 62 L-15 59 L-13 62 Z M-10 62 L-8 59 L-8 62 Z" fill="#6b7280"/>` + r(-14, 64, 1, 1, '#facc15') + r(-11, 64, 1, 1, '#facc15') + r(-2, 61, 2, 8, '#6b7280');
     else if (id === 'slime') p += `<rect x="-14" y="64" width="14" height="11" rx="5" fill="#4ade80"/><circle cx="-10" cy="69" r="1.6" fill="#111"/><circle cx="-4" cy="69" r="1.6" fill="#111"/><rect x="-12" y="65" width="4" height="2" fill="#fff" opacity=".5"/>`;
     else if (id === 'owl') p += `<rect x="-13" y="58" width="11" height="14" rx="4" fill="#92400e"/><circle cx="-10" cy="63" r="2.4" fill="#fde68a"/><circle cx="-5" cy="63" r="2.4" fill="#fde68a"/><circle cx="-10" cy="63" r="1" fill="#111"/><circle cx="-5" cy="63" r="1" fill="#111"/><path d="M-8.5 65 L-6.5 65 L-7.5 67 Z" fill="#f59e0b"/>` + r(-9, 72, 1, 3, '#f59e0b') + r(-6, 72, 1, 3, '#f59e0b');
     else if (id === 'dragon') p += `<path d="M-16 60 L-12 64 L-16 66 Z M2 58 L-2 64 L2 66 Z" fill="#fb7185" opacity=".85"/><rect x="-13" y="60" width="12" height="13" rx="4" fill="#ef4444"/><path d="M-12 60 L-11 56 L-9 60 M-5 60 L-3 56 L-2 60" fill="#fde68a"/><circle cx="-10" cy="64" r="1.4" fill="#fde047"/><circle cx="-4" cy="64" r="1.4" fill="#fde047"/>` + r(-11, 73, 2, 3, '#b91c1c') + r(-5, 73, 2, 3, '#b91c1c');
+    if (lv >= 10) p += `<path d="M-12 57 L-11 53 L-9 55 L-7.5 52 L-6 55 L-4 53 L-3 57 Z" fill="#facc15" stroke="#b45309" stroke-width=".5"/>`;
     return p + '</g>';
   }
 
@@ -208,5 +212,5 @@ const Art = (() => {
     return `<svg viewBox="0 0 80 80" class="enemy-svg" role="img" aria-label="${e.name}">${s}</svg>`;
   }
 
-  return { hero, enemy, item, METAL };
+  return { hero, enemy, item, pet, METAL };
 })();

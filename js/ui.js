@@ -158,7 +158,7 @@
         <span>${defeated || d.rest ? '🌙 New day in' : '⏳ Enemy strikes in'}</span>
         <b id="day-countdown">${countdownText()}</b>
       </div>
-      ${d.rest ? restBox(p) : stakesBox()}
+      ${stakesWrap(d.rest ? restBox(p) : stakesBox(), d, p)}
       <button class="btn ${Game.hasMotivation() ? 'btn-ghost' : 'btn-primary'} btn-block-sm" id="reasons-btn">${Game.hasMotivation() ? '✏️ My reasons & rewards' : '🎯 Set your reason, rewards & forfeit'}</button>`;
     if (startPct !== pct) {
       // Drain the bar smoothly once the attack lands.
@@ -167,6 +167,15 @@
     }
   }
 
+  let stakesOpen = window.innerWidth >= 900;
+  function stakesWrap(inner, d, p) {
+    const st = Game.stakes();
+    let summary;
+    if (d.rest) summary = p.met ? '😴 Rest day done · streak continues' : '😴 Rest day · 1 light activity keeps your streak';
+    else if (p.met) summary = '🏆 Goal complete · rewards earned';
+    else summary = `<span class="sum-win">Win: 🎒 gear · 🪙 · 🔥→${Game.state.hero.streak + 1}</span><span class="sum-lose ${st.knockout ? 'ko' : ''}">Lose: ${st.knockout ? '💀 KNOCKOUT' : `💔 −${st.dmg} HP`}</span>`;
+    return `<details class="stakes-wrap" id="stakes-wrap" ${stakesOpen ? 'open' : ''}><summary>${summary}</summary>${inner}</details>`;
+  }
   function restBox(p) {
     return `<div class="stakes win-box rest-box">
       <div class="stakes-title">😴 Rest day</div>
@@ -249,6 +258,7 @@
   }
 
   /* ================= quests tab ================= */
+  const noteOf = (key) => (Game.state.day.done[key] || {}).note || '';
   function speedText(until) {
     const ms = until - Date.now();
     if (ms <= 0) return 'no speed bonus';
@@ -260,13 +270,18 @@
   function questRow(q) {
     const kindLabel = q.challenge ? 'Daily challenge' : q.kind === 'workout' ? 'Workout' : 'Task';
     let detail = q.challenge ? `${kindLabel} · +${q.gold} gold` : `${esc(q.detail)} · ${kindLabel}`;
+    if (q.habit && q.taskId) {
+      const h = Game.habitInfo(q.taskId);
+      if (h.streak >= 2) detail += ` · <span class="habit-streak" title="Habit streak">🔥${h.streak}</span>`;
+      if (h.level.n > 0) detail += ` <span class="habit-lv" title="${h.level.name} habit (${h.total} times)">${h.level.icon}</span>`;
+    }
     if (q.quick) detail = `🎲 Quick ${kindLabel.toLowerCase()} · ${QUICK_TIMES[q.time].label}${q.monster && !q.done ? ` · 👾 ${esc(q.monster.name)}` : ''}${q.done ? '' : ` · <span class="speed" data-speed="${q.speedUntil}">${speedText(q.speedUntil)}</span>`}`;
     if (q.done) {
       return `<li class="quest done ${q.challenge ? 'challenge' : ''} ${q.quick ? 'quick' : ''} ${q.key === justDone ? 'just-done' : ''}" data-key="${q.key}">
         <span class="check" aria-hidden="true">✓</span>
-        <div class="q-body"><div class="q-title">${q.icon} ${esc(q.title)}</div><div class="q-detail">${detail}${q.crit ? ' · <b class="crit-tag">💥 CRIT</b>' : ''}</div></div>
+        <div class="q-body"><div class="q-title">${q.icon} ${esc(q.title)}</div><div class="q-detail">${detail}${q.crit ? ' · <b class="crit-tag">💥 CRIT</b>' : ''}</div>${noteOf(q.key) ? `<div class="q-note">📝 ${esc(noteOf(q.key))}</div>` : ''}</div>
         <span class="xp-chip earned">+${q.awarded} XP</span>
-        <button class="undo-btn" data-undo="${q.key}" aria-label="Undo ${esc(q.title)}">Undo</button>
+        <span class="done-actions"><button class="note-btn" data-note="${q.key}" aria-label="Add a note to ${esc(q.title)}" title="Add a note">📝</button><button class="undo-btn" data-undo="${q.key}" aria-label="Undo ${esc(q.title)}">Undo</button></span>
       </li>`;
     }
     const d = Game.state.day;
@@ -306,11 +321,14 @@
       </div>`;
 
     $('#tab-quests').innerHTML = `
-      ${d.chest === 'closed' ? `<button class="chest-banner" id="chest-btn"><span class="chest-icon">🎁</span><span><b>Daily chest is ready!</b><small>Tap to open: gold, potions or even gear</small></span></button>` : ''}
-      <button class="quick-btn" id="quick-btn">
-        <span class="quick-dice">🎲</span>
-        <span><b>Got time? Get a Quick Quest!</b><small>A random 2–15 min challenge for bonus XP and gold · ${Game.quickFullLeft()}/${QUICK_FULL_PER_DAY} full rewards left today</small></span>
-      </button>
+      <div class="action-row ${d.chest === 'closed' ? 'has-chest' : ''}">
+        ${d.chest === 'closed' ? `<button class="chest-banner" id="chest-btn" title="Open your daily chest"><span class="chest-icon">🎁</span><span><b>Daily chest</b><small>Tap to open</small></span></button>` : ''}
+        <button class="quick-btn" id="quick-btn">
+          <span class="quick-dice">🎲</span>
+          <span><b>Quick Quest</b><small>Got a few minutes? ${Game.quickFullLeft()}/${QUICK_FULL_PER_DAY} full rewards left</small></span>
+        </button>
+      </div>
+      ${overloadCard()}
       ${quickTodo.length ? `<div class="group"><div class="group-head"><h3>🎲 Quick Quests</h3><span class="req ok">bonus · not part of the daily goal</span></div><ul class="quest-list">${quickTodo.map(questRow).join('')}</ul></div>` : ''}
       <div class="quests-summary">
         <div class="summary-ring" style="--p:${total ? doneCount / total : 0}"><span>${doneCount}<small>/${total}</small></span></div>
@@ -372,6 +390,23 @@
     syncExerciseFields(form);
   }
 
+  function overloadCard() {
+    const o = Game.overloadSuggestion();
+    if (!o) return '';
+    return `<div class="overload-card">
+      <span class="ol-icon">💪</span>
+      <div><b>Ready for more?</b><small>You've done <b>${esc(o.title)}</b> ${o.count} times at ${o.from} ${o.unit}. Your body has adapted. Try <b>${o.to} ${o.unit}</b>?</small>
+        <div class="btn-row"><button class="btn btn-primary btn-small" data-overload="${o.id}" data-to="${o.to}">⬆️ Raise to ${o.to}</button><button class="btn btn-ghost btn-small" data-ol-snooze="${o.id}">Not yet</button></div></div>
+    </div>`;
+  }
+  function repeatFields(repeat = 'daily', days = [], { allowOnce = true } = {}) {
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    return `<label class="field"><span>Repeat</span>
+        <select name="repeat" class="repeat-select"><option value="daily" ${repeat === 'daily' ? 'selected' : ''}>Every day</option><option value="days" ${repeat === 'days' ? 'selected' : ''}>Certain days…</option>${allowOnce ? `<option value="once" ${repeat === 'once' ? 'selected' : ''}>Today only</option>` : ''}</select></label>
+      <div class="day-picker" ${repeat === 'days' ? '' : 'hidden'}>${order.map(i => `<label class="day-chip"><input type="checkbox" name="days" value="${i}" ${days.includes(i) ? 'checked' : ''}><span>${DAY_NAMES[i]}</span></label>`).join('')}</div>`;
+  }
+  function syncRepeat(form) { const sel = form.querySelector('.repeat-select'), dp = form.querySelector('.day-picker'); if (sel && dp) dp.hidden = sel.value !== 'days'; }
+
   function addForm() {
     return `<form class="add-form card" id="add-form" autocomplete="off">
       <label class="field"><span>What do you want to do?</span>
@@ -381,9 +416,8 @@
           <select name="kind"><option value="task">📜 Task</option><option value="workout">🏋️ Workout</option></select></label>
         <label class="field"><span>Effort</span>
           <select name="effort">${Object.entries(EFFORTS).map(([k, e]) => `<option value="${k}" ${k === 'medium' ? 'selected' : ''}>${e.label} (${e.xp} base XP)</option>`).join('')}</select></label>
-        <label class="field"><span>Repeat</span>
-          <select name="repeat"><option value="daily">Every day</option><option value="once">Today only</option></select></label>
       </div>
+      ${repeatFields('daily', [new Date().getDay()])}
       <div id="add-ex" hidden>${exerciseFields('', null, null)}<p class="muted tiny ex-hint">💡 Pick the exercise and amount so your reps count in your stats. Typing "40 push-ups" fills this in for you.</p></div>
       <button class="btn btn-primary" type="submit">Add quest</button>
     </form>`;
@@ -428,6 +462,30 @@
     return a ? `Earn “${a.name}”` : 'Locked';
   }
 
+  function petArt(id, lv) { return `<svg viewBox="-19 48 24 30" class="pet-svg" shape-rendering="crispEdges" aria-hidden="true">${Art.pet(id, lv)}</svg>`; }
+  function petsHTML() {
+    const s = Game.state;
+    return Object.entries(PETS).map(([id, P]) => {
+      const p = s.pets[id];
+      if (p && p.status === 'hatched') {
+        const active = s.look.pet === id, max = p.level >= PET_MAX_LEVEL;
+        return `<div class="pet-card ${active ? 'active' : ''}">
+          <div class="pet-art">${petArt(id, p.level)}</div>
+          <div class="pet-body"><b>${P.icon} ${P.name} <span class="pet-lv">Lv ${p.level}</span></b>
+            <div class="bar pet-bar"><div class="fill" style="width:${max ? 100 : Math.round(p.xp / petXpNeed(p.level) * 100)}%"></div></div>
+            <small>${max ? 'Max level!' : `${p.xp}/${petXpNeed(p.level)} quests to Lv ${p.level + 1}`} · <b>${P.bonusText(p.level)}</b></small></div>
+          ${active ? '<button class="btn btn-small btn-ghost" data-pet="">With you ✓</button>' : `<button class="btn btn-small btn-primary" data-pet="${id}">Bring along</button>`}
+        </div>`;
+      }
+      if (p && p.status === 'egg') {
+        return `<div class="pet-card egg"><div class="pet-art egg-art">🥚</div>
+          <div class="pet-body"><b>${P.name} egg</b><div class="bar pet-bar"><div class="fill egg-fill" style="width:${Math.round(p.progress / PET_HATCH * 100)}%"></div></div>
+          <small>Hatches after ${PET_HATCH - p.progress} more quest${PET_HATCH - p.progress === 1 ? '' : 's'}</small></div></div>`;
+      }
+      return `<div class="pet-card locked"><div class="pet-art egg-art">🔒</div><div class="pet-body"><b>??? egg</b><small>Earn it: ${esc(P.egg)}</small><small class="muted">Bonus when raised: ${P.bonusText(1).replace(/\d+(\.\d+)?/, '…')}</small></div></div>`;
+    }).join('');
+  }
+
   function renderGear() {
     const s = Game.state, L = s.look;
     const set = Game.setInfo();
@@ -462,6 +520,10 @@
         <div class="section-head"><h2>⚡ Gear powers</h2><span class="muted tiny">From everything you're wearing</span></div>
         ${gearPowersHTML()}
       </div>
+      <div class="card" id="pets-card">
+        <div class="section-head"><h2>🐾 Pets</h2><span class="muted tiny">Earn eggs, hatch them with quests, raise your pet to level ${PET_MAX_LEVEL}</span></div>
+        <div class="pets">${petsHTML()}</div>
+      </div>
       <div class="card">
         <div class="section-head"><h2>Appearance</h2><span class="muted tiny">Unlock capes and pets by leveling and earning badges</span></div>
         <div class="look-grid">
@@ -471,7 +533,7 @@
             <div class="look-row"><span>Hair color</span><div class="opts">${swatch('hairColor', LOOKS.hairColors, L.hairColor)}</div></div>
             <div class="look-row"><span>Skin</span><div class="opts">${swatch('skin', LOOKS.skins, L.skin)}</div></div>
             <div class="look-row"><span>Cape</span><div class="opts">${unlockList('cape', LOOKS.capes, L.cape)}</div></div>
-            <div class="look-row"><span>Pet</span><div class="opts">${unlockList('pet', LOOKS.pets, L.pet)}</div></div>
+
           </div>
         </div>
       </div>
@@ -582,7 +644,8 @@
       let cls = '', icon = '';
       if (h) { cls = h.rest && h.met ? 'rest' : h.met ? 'win' : 'loss'; icon = h.rest && h.met ? '😴' : h.met ? '🏆' : '💀'; h.met ? wins++ : losses++; }
       if (k === today) { cls += ' today'; if (Game.progress().met) icon = '🏆'; }
-      cells += `<span class="cal-cell ${cls}" title="${k}${h ? ` · ${h.met ? 'won' : 'lost'} vs ${esc(h.enemy)}` : ''}"><i>${dnum}</i>${icon}</span>`;
+      const notes = h && (h.items || []).some(x => x.n);
+      cells += `<button type="button" class="cal-cell ${cls}" data-day="${k}" ${h || k === today ? '' : 'disabled'} title="${k}${h ? ` · ${h.met ? 'won' : 'lost'} vs ${esc(h.enemy)}` : ''}"><i>${dnum}</i>${icon}${notes ? '<em class="cal-note">📝</em>' : ''}</button>`;
     }
     return `<div class="cal-head">
         <button class="btn btn-small btn-ghost" data-cal="1" aria-label="Previous month">‹</button>
@@ -591,6 +654,21 @@
       </div>
       <div class="cal-grid">${['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => `<span class="cal-dow">${d}</span>`).join('')}${cells}</div>
       <p class="muted tiny">This month: ${wins} win${wins === 1 ? '' : 's'} · ${losses} loss${losses === 1 ? '' : 'es'}</p>`;
+  }
+
+  function habitsHTML() {
+    const list = Game.state.tasks.filter(t => t.repeat !== 'once' && !t.forfeit);
+    if (!list.length) return '<p class="muted">Add your own quests to track them as habits.</p>';
+    return `<div class="habits">${list.map(t => {
+      const h = Game.habitInfo(t.id);
+      const sched = t.repeat === 'days' ? (t.days || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DAY_NAMES[i]).join(' · ') : 'Every day';
+      return `<div class="habit">
+        <div class="habit-top"><b>${t.kind === 'workout' ? '🏋️' : '📜'} ${esc(t.title)}</b><span class="habit-badge" title="${h.level.name} habit">${h.level.icon} ${h.level.name}</span></div>
+        <div class="habit-stats"><span>🔥 <b>${h.streak}</b> streak</span><span>🏆 best ${h.best}</span><span>✅ ${h.total} times</span>${h.rate != null ? `<span>📊 <b>${h.rate}%</b> (30 days)</span>` : ''}</div>
+        ${h.rate != null ? `<div class="bar habit-bar"><div class="fill" style="width:${h.rate}%;background:${h.rate >= 80 ? 'var(--green)' : h.rate >= 50 ? 'var(--gold)' : 'var(--red)'}"></div></div>` : ''}
+        <small class="muted">${sched}${h.next ? ` · ${h.toNext} more to ${h.next.icon} ${h.next.name}` : ' · max level!'}</small>
+      </div>`;
+    }).join('')}</div>`;
   }
 
   function weeklyChart() {
@@ -653,7 +731,11 @@
 
     $('#tab-journey').innerHTML = `
       <div class="card">
-        <h2>📅 Calendar</h2>
+        <div class="section-head"><h2>📈 My habits</h2><button class="btn btn-ghost btn-small" id="review-btn">📊 Last week's review</button></div>
+        ${habitsHTML()}
+      </div>
+      <div class="card">
+        <h2>📅 Calendar</h2><p class="muted tiny">Tap a day to see what you did and your notes.</p>
         ${calendarHTML()}
       </div>
       <div class="card">
@@ -697,13 +779,20 @@
           </div>
           <small class="muted">${notifState === 'unsupported' ? 'This browser does not support notifications.' : notifState === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser settings.' : 'Works while the app is open or running in the background. Install the app for the best results.'}</small>
         </div>
+        <div class="field"><span>🔊 Sound</span>
+          <div class="sound-settings">
+            <label class="vol-row">Volume <input type="range" id="vol" min="0" max="100" step="5" value="${Math.round(Sound.prefs.volume * 100)}"><b id="vol-val">${Math.round(Sound.prefs.volume * 100)}%</b></label>
+            <label class="switch"><input type="checkbox" id="snd-sfx" ${Sound.prefs.sfx ? 'checked' : ''}><span>Sound effects</span></label>
+            <label class="switch"><input type="checkbox" id="snd-voice" ${Sound.prefs.voice ? 'checked' : ''}><span>Enemy talking blips</span></label>
+          </div></div>
         <label class="switch field"><input type="checkbox" id="jump-battle" ${st.jumpToBattle !== false ? 'checked' : ''}><span>🏟️ Scroll up to the battle scene when I finish a quest</span></label>
         <label class="field"><span>💬 Enemy taunts</span>
           <select id="taunt-mode">${[['off', 'Off'], ['normal', 'Normal'], ['savage', '🔥 Savage (harsh and personal)']].map(([v, l]) => `<option value="${v}" ${(st.taunts || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <div class="field"><span>Real-life motivation</span><div><button class="btn btn-ghost" id="reasons-btn2">🎯 Edit reason, rewards & forfeit</button></div></div>
       </div>
+      <div class="card" id="cloud-card">${cloudCardHTML()}</div>
       <div class="card" id="sync-card">
-        <h2>🔄 Backup & sync</h2>
+        <h2>🔄 Backup & sync codes</h2>
         <p class="muted">Your progress is saved in this browser. To move it to another device (or keep a backup), use a sync code or a backup file.</p>
         <div class="sync-grid">
           <div class="sync-box">
@@ -724,6 +813,109 @@
         ${installHTML()}
         <button class="btn btn-danger mt" id="reset-btn">Start over</button>
       </div>`;
+  }
+
+  /* ---------- cloud sync ---------- */
+  const CLOUD_SQL = `create table public.saves (
+  user_id uuid primary key references auth.users on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.saves enable row level security;
+create policy "read own save" on public.saves for select using (auth.uid() = user_id);
+create policy "insert own save" on public.saves for insert with check (auth.uid() = user_id);
+create policy "update own save" on public.saves for update using (auth.uid() = user_id) with check (auth.uid() = user_id);`;
+  function timeAgo(ms) {
+    if (!ms) return 'never';
+    const s = Math.round((Date.now() - ms) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.round(s / 60)} min ago`;
+    if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+    return new Date(ms).toLocaleDateString();
+  }
+  function cloudStatusText(ci) {
+    if (ci.status === 'syncing') return '🔄 Syncing…';
+    if (ci.status === 'error') return `⚠️ ${esc(ci.error)}`;
+    if (ci.status === 'synced') return `✅ Synced ${timeAgo(ci.lastSync)}`;
+    return '';
+  }
+  function cloudCardHTML() {
+    const ci = Cloud.info();
+    const head = '<div class="section-head"><h2>☁️ Cloud sync</h2>' + (ci.email ? '<span class="chip chip-ok">On</span>' : '') + '</div>';
+    if (!ci.configured) {
+      return `${head}
+        <p class="muted">Keep your phone and computer in sync automatically. It uses a free <b>Supabase</b> database that you create once (about 5 minutes).</p>
+        <details class="help-sec cloud-setup"><summary>📋 How to set it up</summary>
+          <ol class="setup-steps">
+            <li>Go to <b>supabase.com</b>, create a free account and click <b>New project</b>. Pick any name and password and the region closest to you.</li>
+            <li>Open <b>SQL Editor</b> → <b>New query</b>, paste this code and click <b>Run</b>:
+              <textarea class="code-box" readonly rows="6">${esc(CLOUD_SQL)}</textarea>
+              <button type="button" class="btn btn-ghost btn-small" id="copy-sql">📋 Copy code</button></li>
+            <li>Optional but easier: <b>Authentication</b> → <b>Sign In / Providers</b> → <b>Email</b>, turn off <b>Confirm email</b>.</li>
+            <li>Open <b>Project Settings</b> → <b>API</b> (or "Data API" / "API Keys"). Copy the <b>Project URL</b> and the <b>anon public</b> key and paste them below.</li>
+            <li>Do the same on your other device, then log in with the same email and password on both.</li>
+          </ol>
+        </details>
+        <form id="cloud-config-form" class="cloud-form" autocomplete="off">
+          <label class="field"><span>Project URL</span><input name="url" placeholder="https://xxxx.supabase.co" inputmode="url"></label>
+          <label class="field"><span>anon public key</span><input name="anonKey" placeholder="eyJhbGciOi…"></label>
+          <button class="btn btn-primary" type="submit">Save & continue</button>
+        </form>`;
+    }
+    if (!ci.email) {
+      return `${head}
+        <p class="muted">Log in on every device with the same email and password. Your progress then syncs automatically.</p>
+        <form id="cloud-login-form" class="cloud-form" autocomplete="on">
+          <label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" required></label>
+          <label class="field"><span>Password <small class="muted">(at least 6 characters)</small></span><input name="password" type="password" minlength="6" autocomplete="current-password" required></label>
+          <div class="btn-row"><button class="btn btn-primary" type="submit" name="act" value="in">Log in</button><button class="btn btn-ghost" type="submit" name="act" value="up">Create account</button></div>
+        </form>
+        <p class="tiny cloud-status" id="cloud-status">${cloudStatusText(ci)}</p>
+        <button type="button" class="link-btn tiny" id="cloud-reset">Change Supabase project</button>`;
+    }
+    return `${head}
+      <p>Logged in as <b>${esc(ci.email)}</b></p>
+      <p class="cloud-status" id="cloud-status">${cloudStatusText(ci)}</p>
+      <p class="muted tiny">Changes upload a few seconds after you make them, and the app checks for changes from your other device whenever you open it.</p>
+      <div class="btn-row"><button class="btn btn-primary btn-small" id="cloud-sync">🔄 Sync now</button><button class="btn btn-ghost btn-small" id="cloud-logout">Log out</button></div>`;
+  }
+  function renderCloudCard() { const c = document.getElementById('cloud-card'); if (c) c.innerHTML = cloudCardHTML(); }
+
+  /* Both devices changed since the last sync: let the player pick which one to keep. */
+  function cloudConflict(local, remote) {
+    return new Promise((resolve) => {
+      const sum = (s) => { const i = Game.levelInfo(s.hero.totalXP), n = s.stats ? s.stats.workouts + s.stats.tasks : 0; return `<b>Level ${i.level}</b><span>${(s.hero.totalXP || 0).toLocaleString()} XP · ${n} quest${n === 1 ? '' : 's'} done</span><small class="muted">Last change: ${s.meta && s.meta.updatedAt ? new Date(s.meta.updatedAt).toLocaleString() : 'unknown'}</small>`; };
+      const md = modal(`
+        <div class="modal-burst">☁️</div>
+        <h2>Which progress do you want to keep?</h2>
+        <p class="muted">This device and the cloud both have changes. Pick one: the other will be replaced.</p>
+        <div class="conflict-grid">
+          <button class="conflict-opt" data-keep="local"><span>📱 This device</span>${sum(local)}</button>
+          <button class="conflict-opt" data-keep="cloud"><span>☁️ Cloud</span>${sum(remote)}</button>
+        </div>`, { dismissable: false });
+      md.root.querySelectorAll('[data-keep]').forEach(b => b.addEventListener('click', () => { md.close(); resolve(b.dataset.keep); }));
+    });
+  }
+  function cloudApplied() {
+    if ($('#app').hidden) { $('#modal-root').innerHTML = ''; boot(); toast('☁️ Your progress was loaded from the cloud'); return; }
+    const rep = Game.ensureToday();
+    renderAll();
+    toast('☁️ Updated with progress from your other device');
+    if (rep) showReport(rep);
+  }
+  function cloudLoginModal() {
+    const md = modal(`<div class="modal-burst">☁️</div><h2>Log in to cloud sync</h2>
+      <form id="cloud-login-form2" class="cloud-form">
+        <label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" required></label>
+        <label class="field"><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label>
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" type="submit">Log in</button></div>
+      </form>`);
+    md.root.querySelector('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      try { await Cloud.signIn(f.get('email'), f.get('password')); if (!Game.state) { Sound.play('error'); toast('No cloud progress found for this account yet.'); } }
+      catch (err) { Sound.play('error'); toast(`❌ ${err.message}`); }
+    });
   }
 
   function installHTML() {
@@ -763,6 +955,13 @@
     root.appendChild(el);
     while (root.children.length > 3) root.firstElementChild.remove();
     setTimeout(() => el.remove(), ms);
+  }
+  /* One combined popup instead of a stack of separate ones. */
+  function rewardToast(lines) {
+    const el = document.createElement('div');
+    el.className = 'reward-toast-inner';
+    el.innerHTML = `<b>✨ Rewards</b><ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul>`;
+    toast(el, 'reward-toast', 3200 + lines.length * 700);
   }
   function achievementToast(a) {
     const el = document.createElement('div');
@@ -816,7 +1015,7 @@
   }
 
   function handleEvents(events, anchor) {
-    let delay = 0;
+    const summary = [], achs = [];
     for (const ev of events || []) {
       if (ev.type === 'xp') {
         floatText(anchor, `${ev.crit ? '💥 ' : ''}+${ev.amount} XP`, ev.crit ? 'xp crit' : 'xp');
@@ -830,24 +1029,35 @@
           speak(ev.crit ? 'crit' : ev.combo >= 3 ? 'combo' : p.pct >= 0.66 ? 'nervous' : 'hit');
         });
         if (ev.healed) setTimeout(() => floatText($('#hero-art'), `+${ev.healed} HP`, 'heal'), 300);
-        if (ev.speed) setTimeout(() => toast('⚡ Speed bonus! +25% XP for finishing fast', 'gold'), 200);
-        if (ev.secondWind) toast('🌬️ Second Wind! First quest of the day: ×1.5 XP, double damage', 'gold');
-        if (ev.crit) {
-          Sound.play('crit');
-          animate(document.body, 'shake');
-          toast(ev.critMult === 3 ? '🪓 EXECUTIONER CRIT! Triple XP & gold' : '💥 CRITICAL HIT! Double XP & gold', 'crit-toast');
-        } else Sound.play('complete');
+        if (ev.speed) summary.push('⚡ Speed bonus: +25% XP');
+        if (ev.secondWind) summary.push('🌬️ Second Wind: ×1.5 XP, double damage');
+        if (ev.crit) { Sound.play('crit'); summary.push(ev.critMult === 3 ? '🪓 Executioner crit: triple XP & gold' : '💥 Critical hit: double XP & gold'); }
+        else Sound.play('complete');
         if (ev.combo >= 2) setTimeout(() => { Sound.play('combo', ev.combo); floatText($('#combo-meter') || anchor, `⚡ COMBO ×${ev.combo}`, 'combo-float'); }, 350);
       } else if (ev.type === 'bossHit') {
         setTimeout(() => { animate($('#boss-art'), 'hit'); Sound.play('bossHit'); floatText($('#boss-art'), `-${ev.dmg}`, 'dmg', 10); }, 200);
       } else if (ev.type === 'challenge') {
-        toast(`⭐ Daily challenge complete! +${ev.gold} gold`, 'gold');
+        summary.push(`⭐ Daily challenge: +${ev.gold} gold`);
       } else if (ev.type === 'bonus') {
         setTimeout(() => Sound.play('bonus'), 250);
-        toast(`🎯 Daily goal bonus: +${ev.amount} XP`, 'gold');
+        summary.push(`🎯 Daily goal bonus: +${ev.amount} XP`);
       } else if (ev.type === 'achievement') {
-        delay += 600;
-        setTimeout(() => { Sound.play('achievement'); achievementToast(ev.ach); }, delay);
+        achs.push(ev.ach);
+      } else if (ev.type === 'egg') {
+        summary.push(`🥚 You earned a ${PETS[ev.id].name} egg! Do ${PET_HATCH} quests to hatch it`);
+      } else if (ev.type === 'petLevel') {
+        summary.push(`🐾 ${PETS[ev.id].name} grew to level ${ev.level}: ${PETS[ev.id].bonusText(ev.level)}`);
+      } else if (ev.type === 'habitLevel') {
+        summary.push(`${ev.level.icon} “${esc(ev.title)}” is now a ${ev.level.name} habit!`);
+      } else if (ev.type === 'petHatch') {
+        enqueueModal((done) => {
+          Sound.play('chest');
+          const P = PETS[ev.id];
+          modal(`<div class="hatch-anim"><span class="hatch-egg">🥚</span><div class="hatch-pet">${petArt(ev.id, 1)}</div></div>
+            <h2>Your egg hatched!</h2><p>Say hi to your new <b>${P.name}</b>! It grows as you complete quests together.</p>
+            <p class="muted">Bonus: ${P.bonusText(1)} (grows every level, up to level ${PET_MAX_LEVEL})</p>
+            <div class="modal-actions"><button class="btn btn-primary" data-close>Welcome! 🐾</button></div>`, { onClose: () => { renderAll(); done(); } });
+        });
       } else if (ev.type === 'defeat') {
         Arena.defeat(ev.enemy.tier, ev.rest).then(() => { speak(ev.rest ? 'sleeping' : 'beaten'); renderBattle(); });
         const m = Game.state.motivation;
@@ -877,7 +1087,7 @@
           const diff = Game.state.hero.difficulty;
           const a = Game.requirements(ev.from, diff), b = Game.requirements(ev.to, diff);
           const rank = RANKS.find(r => r.level > ev.from && r.level <= ev.to);
-          const unlocks = [...LOOKS.capes, ...LOOKS.pets].filter(o => o.req.level && o.req.level > ev.from && o.req.level <= ev.to);
+          const unlocks = LOOKS.capes.filter(o => o.req && o.req.level && o.req.level > ev.from && o.req.level <= ev.to);
           const changes = [];
           Sound.play('levelup');
           if (ev.skillPoint) changes.push('🌳 <b>New skill point!</b> Spend it in the Hero tab');
@@ -897,6 +1107,11 @@
             { onClose: () => { renderAll(); done(); } });
         });
       }
+    }
+    if (achs.length) summary.push(`🏅 ${achs.length > 1 ? `${achs.length} achievements` : 'Achievement'}: ${achs.map(a => `${a.icon} ${esc(a.name)}`).join(', ')}`);
+    if (summary.length) {
+      const show = () => { if (achs.length) Sound.play('achievement'); rewardToast(summary); };
+      if (events.some(e => e.type === 'xp')) Arena.whenIdle().then(show); else show();
     }
   }
 
@@ -931,9 +1146,10 @@
         <div class="modal-actions"><button class="btn btn-primary" data-close>To battle!</button></div>`,
         { onClose: () => { renderAll(); done(); } });
     });
+    if (report.review) reviewModal(report.review, true);
   }
 
-  function reasonsModal(intro = false) {
+  function reasonsModal(intro = false, after) {
     const m = Game.state.motivation;
     const md = modal(`
       <div class="modal-burst">🎯</div>
@@ -957,7 +1173,7 @@
           <button type="button" class="btn btn-ghost" data-close>${intro ? 'Skip for now' : 'Cancel'}</button>
           <button class="btn btn-primary" type="submit">Save</button>
         </div>
-      </form>`, { onClose: renderAll });
+      </form>`, { onClose: () => { renderAll(); if (after) after(); } });
     md.root.querySelector('#reasons-form').addEventListener('submit', (e) => {
       e.preventDefault();
       Game.setMotivation(Object.fromEntries(new FormData(e.target)));
@@ -995,15 +1211,16 @@
       <form id="edit-form" autocomplete="off">
         <label class="field"><span>Name</span><input name="title" maxlength="80" value="${esc(t.title)}" required></label>
         <label class="field"><span>Effort</span><select name="effort">${Object.entries(EFFORTS).map(([k, e]) => `<option value="${k}" ${k === t.effort ? 'selected' : ''}>${e.label} (${e.xp} base XP)</option>`).join('')}</select></label>
+        ${t.repeat !== 'once' ? repeatFields(t.repeat, t.days || [], { allowOnce: false }) : ''}
         ${t.kind === 'workout' ? exerciseFields('', t.exId, t.amount) + '<p class="muted tiny">Changing the amount applies from now on. Today\'s finished quest keeps its old amount.</p>' : ''}
         <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" type="submit">Save</button></div>
       </form>`, { onClose: renderAll });
     const form = md.root.querySelector('#edit-form');
-    form.addEventListener('change', (e) => { if (e.target.classList.contains('ex-select')) syncExerciseFields(form); });
+    form.addEventListener('change', (e) => { if (e.target.classList.contains('ex-select')) syncExerciseFields(form); if (e.target.name === 'repeat') syncRepeat(form); });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const f = new FormData(form);
-      Game.updateTask(id, { title: f.get('title'), effort: f.get('effort'), ...(t.kind === 'workout' ? readExercise(f) : {}) });
+      Game.updateTask(id, { title: f.get('title'), effort: f.get('effort'), ...(t.repeat !== 'once' ? { repeat: f.get('repeat'), days: f.getAll('days') } : {}), ...(t.kind === 'workout' ? readExercise(f) : {}) });
       Sound.play('loot'); md.close(); toast('✏️ Quest updated');
     });
   }
@@ -1060,6 +1277,61 @@
       const info = Game.exerciseInfo(exId);
       Sound.play('coin'); md.close(); toast(`➕ Added ${amount} ${info.unit} of ${info.name}`);
     });
+  }
+
+  /* ---------- notes, day details, weekly review ---------- */
+  function noteModal(key) {
+    const q = [...Game.quests(), Game.challengeQuest(), ...Game.quickQuests()].find(x => x.key === key);
+    const item = q ? { t: q.title } : null;
+    const md = modal(`
+      <div class="modal-burst">📝</div>
+      <h2>Add a note</h2>
+      <p class="muted">${item ? esc(item.t) : 'Quest'} · e.g. how it went, how you felt, a new personal best.</p>
+      <form id="note-form"><textarea name="note" class="code-box note-box" rows="4" maxlength="280" placeholder="Ran 5.2 km, felt great!">${esc(noteOf(key))}</textarea>
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" type="submit">Save note</button></div></form>`, { onClose: renderAll });
+    const ta = md.root.querySelector('textarea'); ta.focus();
+    md.root.querySelector('#note-form').addEventListener('submit', (e) => { e.preventDefault(); Game.setNote(key, ta.value); Sound.play('click'); md.close(); toast('📝 Note saved'); });
+  }
+  function dayModal(key) {
+    const today = key === Game.todayKey();
+    const h = today ? null : Game.state.history.find(x => x.key === key);
+    const items = today ? Game.dayItems() : (h && h.items) || [];
+    const reps = today ? {} : (h && h.reps) || {};
+    const date = Game.keyToDate(key).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    const result = today ? (Game.progress().met ? '🏆 Enemy defeated' : '⚔️ Battle in progress') : h ? (h.rest && h.met ? '😴 Rest day done' : h.met ? `🏆 Beat the ${esc(h.enemy)}` : `💀 Lost to the ${esc(h.enemy)}`) : '';
+    const repLines = Object.entries(reps).map(([id, n]) => { const x = Game.exerciseInfo(id); return x ? `<li>${x.icon} ${esc(x.name)}: <b>${n} ${x.unit}</b></li>` : ''; }).join('');
+    modal(`
+      <div class="modal-burst">📓</div>
+      <h2>${date}</h2>
+      <p><b>${result}</b></p>
+      ${items.length ? `<ul class="day-items">${items.map(x => `<li><span>${x.i} ${esc(x.t)}${x.q ? ' <small class="muted">(Quick Quest)</small>' : ''}</span>${x.n ? `<em>📝 ${esc(x.n)}</em>` : ''}</li>`).join('')}</ul>` : `<p class="muted">${h ? 'This day was saved before the calendar kept details.' : 'Nothing completed yet.'}</p>`}
+      ${repLines ? `<h3 class="sub">Reps</h3><ul class="day-reps">${repLines}</ul>` : ''}
+      <div class="modal-actions"><button class="btn btn-primary" data-close>Close</button></div>`);
+  }
+  function reviewModal(r, fromReport = false) {
+    if (!r) { toast('No review yet: play a full week first.'); return; }
+    const start = Game.keyToDate(r.week), end = Game.keyToDate(r.week); end.setDate(end.getDate() + 6);
+    const range = `${start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+    const reps = Object.entries(r.reps).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([id, n]) => { const x = Game.exerciseInfo(id); return x ? `<li>${x.icon} ${esc(x.name)}: <b>${n} ${x.unit}</b></li>` : ''; }).join('');
+    const tips = r.slipped.map(sl => `<li><b>${esc(sl.title)}</b>: missed ${sl.missed} of ${sl.scheduled} days. ${sl.missed / sl.scheduled >= 0.6 ? 'Make it smaller (e.g. 5 minutes instead of 15) or move it to fewer days?' : 'Try doing it at the same time every day, like right after breakfast.'} <button class="link-btn" data-edit-habit="${sl.id}">Edit</button></li>`).join('');
+    const fn = (done) => {
+      const md = modal(`
+        <div class="modal-burst">📊</div>
+        <h2>Your week in review</h2>
+        <p class="muted">${range}</p>
+        <div class="stats review-stats">
+          <div class="stat"><b>${r.wins}/${r.days}</b><span>Enemies beaten</span></div>
+          <div class="stat"><b>${r.quests}</b><span>Quests done</span></div>
+          <div class="stat"><b>${r.workouts}</b><span>Workouts</span></div>
+        </div>
+        ${r.best && r.best.done ? `<p>⭐ Best day: <b>${Game.keyToDate(r.best.key).toLocaleDateString(undefined, { weekday: 'long' })}</b> with ${r.best.done} quests.</p>` : ''}
+        ${reps ? `<h3 class="sub">Top exercises</h3><ul class="day-reps">${reps}</ul>` : ''}
+        ${r.strong.length ? `<p>💪 Perfect habits: <b>${r.strong.map(esc).join(', ')}</b>. Keep it up!</p>` : ''}
+        ${tips ? `<h3 class="sub">Habits that slipped</h3><ul class="review-tips">${tips}</ul>` : '<p>🌟 No habits slipped this week. Amazing!</p>'}
+        <div class="modal-actions"><button class="btn btn-primary" data-close>${fromReport ? "Let's make this week better!" : 'Close'}</button></div>`, { onClose: () => { renderAll(); done && done(); } });
+      md.root.querySelectorAll('[data-edit-habit]').forEach(b => b.addEventListener('click', () => { md.close(); setTimeout(() => editTaskModal(b.dataset.editHabit), 50); }));
+    };
+    if (fromReport) enqueueModal(fn); else fn();
   }
 
   /* ---------- quick quest roller ---------- */
@@ -1276,6 +1548,73 @@
     notify(`⚔️ The ${d.enemy.name} is still standing!`, `“${tauntText()}” — ${left} quest${left === 1 ? '' : 's'} left to beat it before midnight.`);
   }
 
+  /* ================= help & tour ================= */
+  const TOUR_KEY = 'questfit.tourDone';
+  const TOUR = [
+    { sel: '#arena', title: 'Your battle', text: 'This is you and today\'s enemy. Every quest you finish makes your hero attack. Beat the enemy by finishing your daily goal before midnight!' },
+    { sel: '#hero-card', title: 'Your hero', text: 'Your level, XP and HP. Quests give XP to level up. If the enemy wins at night, you lose HP.' },
+    { sel: '#tab-quests .quest-list .quest', title: 'Your quests', text: 'Tap a quest when you\'ve done it. Workouts and tasks both count toward beating the enemy.' },
+    { sel: '#quick-btn', title: 'Quick Quests', text: 'Bored with a few minutes to spare? Roll a random mini challenge for bonus XP and gold.' },
+    { sel: '#add-toggle', title: 'Your own habits', text: 'Add the things you want to make a habit, every day or on certain weekdays. They track streaks and level up.' },
+    { sel: '.tabs', title: 'More to explore', text: 'Gear and pets, the shop, your hero stats and skills, and your journey with calendar, habits and settings.' },
+    { sel: '#help-btn', title: 'Need help?', text: 'Tap ❓ any time for help or to see this tour again. Good luck, hero! ⚔️' },
+  ];
+  function startTour() {
+    switchTab('quests');
+    let i = 0;
+    const layer = document.createElement('div');
+    layer.className = 'tour-layer';
+    layer.innerHTML = '<div class="tour-spot"></div><div class="tour-tip" role="dialog" aria-live="polite"></div>';
+    document.body.appendChild(layer);
+    const spot = layer.querySelector('.tour-spot'), tip = layer.querySelector('.tour-tip');
+    const end = () => { layer.remove(); try { localStorage.setItem(TOUR_KEY, '1'); } catch { /* ignore */ } };
+    const show = () => {
+      const step = TOUR[i];
+      const target = document.querySelector(step.sel);
+      if (!target) { i++; if (i < TOUR.length) show(); else end(); return; }
+      target.scrollIntoView({ block: 'center' });
+      setTimeout(() => {
+        const r = target.getBoundingClientRect(), pad = 6;
+        Object.assign(spot.style, { left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+        tip.innerHTML = `<small>${i + 1} / ${TOUR.length}</small><b>${step.title}</b><p>${step.text}</p>
+          <div class="btn-row"><button class="btn btn-ghost btn-small" data-tour="skip">Skip</button><button class="btn btn-primary btn-small" data-tour="next">${i === TOUR.length - 1 ? 'Done!' : 'Next →'}</button></div>`;
+        const below = r.bottom + 190 < window.innerHeight;
+        tip.style.top = below ? `${r.bottom + 14}px` : '';
+        tip.style.bottom = below ? '' : `${window.innerHeight - r.top + 14}px`;
+      }, 80);
+    };
+    layer.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tour]');
+      if (!b) return;
+      Sound.play('click');
+      if (b.dataset.tour === 'skip') return end();
+      i++;
+      if (i >= TOUR.length) end(); else show();
+    });
+    show();
+  }
+  function helpModal() {
+    const sec = (t, b) => `<details class="help-sec"><summary>${t}</summary><p>${b}</p></details>`;
+    const md = modal(`
+      <div class="modal-burst">❓</div>
+      <h2>How QuestFit works</h2>
+      <button class="btn btn-primary btn-block" id="tour-again">🧭 Show the tour</button>
+      <div class="help-list">
+        ${sec('⚔️ The daily enemy', 'Finish the required number of workouts and tasks before midnight to beat today\'s enemy. You get gear, gold and +1 streak. If you don\'t, it hits you at midnight. At 0 HP you\'re knocked out: you lose XP and a piece of gear.')}
+        ${sec('⬆️ Levels', 'Quests give XP. Each level needs a bit more XP, and higher levels need more quests per day and bigger workouts. Every 5 levels you get a skill point (Hero tab).')}
+        ${sec('🔁 Habits', 'Your own quests are your habits. Set them to every day or certain weekdays. Each has its own streak and success rate, and levels up at 7, 30, 100 and 365 completions. See them in Journey → My habits.')}
+        ${sec('💪 Getting stronger', 'After you do a workout 10 times at the same amount, the app suggests a little more. You decide whether to raise it.')}
+        ${sec('🎲 Quick Quests', 'Random 2–15 minute challenges for spare time. They give bonus XP and gold but don\'t count toward the daily goal. The first 5 per day give full rewards.')}
+        ${sec('🐾 Pets', 'Earn eggs by reaching goals (see Gear → Pets). An egg hatches after 10 quests. Bring a pet along and it grows with every quest, giving a bonus up to level 10.')}
+        ${sec('🎒 Gear & gold', 'Gear gives bonus XP and special effects. Spend gold in the shop on potions, streak shields, crates and eggs. Reforge gear to re-roll its effects.')}
+        ${sec('👑 Weekly boss', 'Every quest during the week damages the weekly boss. Beat it by Sunday midnight for Epic+ gear and lots of gold.')}
+        ${sec('📝 Notes', 'Tap 📝 on a finished quest to add a note. You can read your notes later by tapping a day in the calendar.')}
+        ${sec('🔄 Sync', 'Use cloud sync (Journey → Cloud sync) to keep your phone and computer in sync, or a sync code / backup file.')}
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" data-close>Close</button></div>`);
+    md.root.querySelector('#tour-again').addEventListener('click', () => { md.close(); setTimeout(startTour, 100); });
+  }
+
   /* ================= onboarding ================= */
   function onboarding() {
     let chosen = 'beginner';
@@ -1296,19 +1635,20 @@
         <label class="field"><span>Name your hero</span><input name="name" maxlength="20" placeholder="Hero" autofocus></label>
         <div class="field"><span>Choose your difficulty</span><div class="diff-cards">${cards}</div></div>
         <button class="btn btn-primary btn-block" type="submit">Begin adventure</button>
-        <p class="muted tiny center">Already playing on another device? <button type="button" class="link-btn" id="onb-sync">Load your progress</button></p>
+        <p class="muted tiny center">Already playing on another device? ${Cloud.configured() ? '<button type="button" class="link-btn" id="onb-cloud">Log in to cloud sync</button> or ' : ''}<button type="button" class="link-btn" id="onb-sync">use a sync code</button></p>
       </form>`, { dismissable: false });
     m.root.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
       chosen = b.dataset.pick;
       m.root.querySelectorAll('[data-pick]').forEach(x => x.classList.toggle('selected', x === b));
     }));
     m.root.querySelector('#onb-sync').addEventListener('click', () => pasteCode());
+    const oc = m.root.querySelector('#onb-cloud'); if (oc) oc.addEventListener('click', () => cloudLoginModal());
     m.root.querySelector('#start-form').addEventListener('submit', (e) => {
       e.preventDefault();
       Game.start(new FormData(e.target).get('name'), chosen);
       m.close();
       boot();
-      reasonsModal(true);
+      reasonsModal(true, () => { let seen = false; try { seen = !!localStorage.getItem(TOUR_KEY); } catch { /* ignore */ } if (!seen) setTimeout(startTour, 300); });
     });
   }
 
@@ -1335,12 +1675,14 @@
 
   function wire() {
     renderSoundToggle();
+    $('#help-btn').addEventListener('click', () => { Sound.play('click'); helpModal(); });
     $('#sound-toggle').addEventListener('click', () => { Sound.setMuted(!Sound.muted); renderSoundToggle(); Sound.play('click'); });
     $('#gold-label').addEventListener('click', () => switchTab('shop'));
     document.querySelector('.tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) { switchTab(b.dataset.tab); Sound.play('click'); } });
 
     $('#hero-card').addEventListener('click', (e) => { if (e.target.closest('#potion-btn')) drinkPotion(); });
     $('#battle-card').addEventListener('click', (e) => { if (e.target.closest('#reasons-btn')) reasonsModal(); });
+    $('#battle-card').addEventListener('toggle', (e) => { if (e.target.id === 'stakes-wrap') stakesOpen = e.target.open; }, true);
 
     $('#tab-quests').addEventListener('click', (e) => {
       const c = e.target.closest('[data-complete]');
@@ -1357,6 +1699,12 @@
       }
       if (e.target.closest('#chest-btn')) { openChestFlow(); return; }
       if (e.target.closest('#quick-btn')) { Sound.play('click'); quickModal(); return; }
+      const nb = e.target.closest('[data-note]');
+      if (nb) { noteModal(nb.dataset.note); return; }
+      const ol = e.target.closest('[data-overload]');
+      if (ol) { Game.acceptOverload(ol.dataset.overload, Number(ol.dataset.to)); Sound.play('levelup'); renderAll(); toast(`💪 Raised to ${ol.dataset.to}. Let's go!`); return; }
+      const os = e.target.closest('[data-ol-snooze]');
+      if (os) { Game.snoozeOverload(os.dataset.olSnooze); renderAll(); toast('Okay! I\'ll ask again in a week.'); return; }
       const uq = e.target.closest('[data-unquick]');
       if (uq) { Game.removeQuick(uq.dataset.unquick); Sound.play('undo'); renderAll(); toast('Quick Quest removed'); return; }
       const tm = e.target.closest('[data-timer]');
@@ -1393,6 +1741,7 @@
     $('#tab-quests').addEventListener('change', (e) => {
       const form = e.target.closest('#add-form');
       if (!form) return;
+      if (e.target.name === 'repeat') syncRepeat(form);
       if (e.target.name === 'kind') { form.querySelector('#add-ex').hidden = e.target.value !== 'workout'; if (e.target.value === 'workout') applyDetection(form, '', form.title.value); }
       if (e.target.classList.contains('ex-select')) { e.target.dataset.touched = '1'; syncExerciseFields(form); }
     });
@@ -1400,7 +1749,7 @@
       if (e.target.id !== 'add-form') return;
       e.preventDefault();
       const f = new FormData(e.target);
-      const t = Game.addTask({ title: f.get('title'), effort: f.get('effort'), kind: f.get('kind'), repeat: f.get('repeat'), ...readExercise(f) });
+      const t = Game.addTask({ title: f.get('title'), effort: f.get('effort'), kind: f.get('kind'), repeat: f.get('repeat'), days: f.getAll('days'), ...readExercise(f) });
       if (t) { toast(`📜 New quest: ${t.title}`); addOpen = false; renderAll(); }
     });
 
@@ -1425,6 +1774,8 @@
         handleEvents(res.events);
         return;
       }
+      const pt = e.target.closest('[data-pet]');
+      if (pt) { Game.setPet(pt.dataset.pet || null); Sound.play('click'); renderAll(); toast(pt.dataset.pet ? `🐾 ${PETS[pt.dataset.pet].name} is coming along!` : 'Your pet is resting at home'); return; }
       const lk = e.target.closest('[data-look]');
       if (lk) { Game.setLook({ [lk.dataset.look]: lk.dataset.val || null }); Sound.play('click'); renderAll(); }
     });
@@ -1461,6 +1812,13 @@
       }
       if (e.target.closest('#reasons-btn2')) { reasonsModal(); return; }
       if (e.target.closest('#add-reps')) { addRepsModal(); return; }
+      const dy = e.target.closest('[data-day]');
+      if (dy) { dayModal(dy.dataset.day); return; }
+      if (e.target.closest('#review-btn')) { reviewModal(Game.weekReview(Game.lastWeekKey())); return; }
+      if (e.target.closest('#copy-sql')) { try { await navigator.clipboard.writeText(CLOUD_SQL); toast('📋 SQL copied'); } catch { toast('Select the code and copy it'); } return; }
+      if (e.target.closest('#cloud-sync')) { Cloud.sync('manual'); return; }
+      if (e.target.closest('#cloud-logout')) { if (confirm('Log out of cloud sync on this device? Your progress stays here.')) { await Cloud.signOut(); renderCloudCard(); toast('Logged out of cloud sync'); } return; }
+      if (e.target.closest('#cloud-reset')) { if (confirm('Remove the Supabase project details from this device?')) { Cloud.setConfig('', ''); await Cloud.signOut(); renderCloudCard(); } return; }
       if (e.target.closest('#copy-code')) { copyCode(); return; }
       if (e.target.closest('#paste-code')) { pasteCode(); return; }
       if (e.target.closest('#export-file')) { exportFile(); return; }
@@ -1474,9 +1832,13 @@
         Game.reset(); $('#app').hidden = true; onboarding();
       }
     });
+    $('#tab-journey').addEventListener('input', (e) => { if (e.target.id === 'vol') $('#vol-val').textContent = e.target.value + '%'; });
     $('#tab-journey').addEventListener('change', async (e) => {
       if (e.target.id === 'import-input' && e.target.files[0]) importFile(e.target.files[0]);
       if (e.target.id === 'rest-day') { Game.setSetting('restDay', e.target.value === '' ? null : Number(e.target.value)); toast(e.target.value === '' ? 'No rest day' : '😴 Rest day saved — starts from the next one'); }
+      if (e.target.id === 'vol') { Sound.setPrefs({ volume: Number(e.target.value) / 100 }); Sound.play('coin'); }
+      if (e.target.id === 'snd-sfx') { Sound.setPrefs({ sfx: e.target.checked }); Sound.play('click'); }
+      if (e.target.id === 'snd-voice') { Sound.setPrefs({ voice: e.target.checked }); Sound.play('blip'); }
       if (e.target.id === 'jump-battle') { Game.setSetting('jumpToBattle', e.target.checked); toast(e.target.checked ? '🏟️ Jumping to the battle is on' : 'Jumping to the battle is off'); }
       if (e.target.id === 'taunt-mode') { Game.setSetting('taunts', e.target.value); if (e.target.value === 'off') Arena.hideBubble(); else greet(); toast(e.target.value === 'off' ? '🤐 Taunts off' : e.target.value === 'savage' ? '🔥 Savage taunts on. You asked for it.' : '💬 Taunts on'); }
       if (e.target.id === 'remind-time') Game.setSetting('reminderTime', e.target.value || '18:00');
@@ -1490,7 +1852,27 @@
         } else { Game.setSetting('reminders', false); toast('🔕 Reminder off'); }
       }
     });
-    $('#tab-journey').addEventListener('submit', (e) => {
+    $('#tab-journey').addEventListener('submit', async (e) => {
+      if (e.target.id === 'cloud-config-form') {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        if (!/^https:\/\/.+/.test(f.get('url')) || String(f.get('anonKey')).trim().length < 20) { Sound.play('error'); toast('Check the Project URL (starts with https://) and the key.'); return; }
+        Cloud.setConfig(f.get('url'), f.get('anonKey'));
+        await Cloud.init({ onConflict: cloudConflict, onApplied: cloudApplied });
+        renderCloudCard(); toast('☁️ Saved! Now log in or create an account.');
+        return;
+      }
+      if (e.target.id === 'cloud-login-form') {
+        e.preventDefault();
+        const f = new FormData(e.target), act = e.submitter && e.submitter.value;
+        try {
+          if (act === 'up') { const r = await Cloud.signUp(f.get('email'), f.get('password')); toast(r.confirm ? '📧 Check your email to confirm, then log in here.' : '☁️ Account created. Sync is on!'); }
+          else { await Cloud.signIn(f.get('email'), f.get('password')); toast('☁️ Logged in. Sync is on!'); }
+          Sound.play('buy');
+        } catch (err) { Sound.play('error'); toast(`❌ ${err.message}`); }
+        renderCloudCard();
+        return;
+      }
       if (e.target.id !== 'rename-form') return;
       e.preventDefault();
       Game.rename(new FormData(e.target).get('name'));
@@ -1534,12 +1916,27 @@
     checkReminder();
     lastActivity = Date.now();
     setTimeout(greet, 900);
+    try {
+      if (!localStorage.getItem(TOUR_KEY) && Game.state.stats.workouts + Game.state.stats.tasks > 0) {
+        localStorage.setItem(TOUR_KEY, '1');
+        setTimeout(() => toast('❓ New: tap the ? at the top for help or a tour of the app'), 2500);
+      }
+    } catch { /* ignore */ }
   }
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
 
+  Game.onSave(() => Cloud.scheduleUpload());
+  Cloud.onChange((ci) => {
+    const st = document.getElementById('cloud-status');
+    if (st) st.innerHTML = cloudStatusText(ci); else if (document.getElementById('cloud-card')) renderCloudCard();
+  });
   wire();
   if (Game.load()) boot(); else onboarding();
+  Cloud.init({ onConflict: cloudConflict, onApplied: cloudApplied });
+  // Check for changes from the other device when coming back to the app, and every 2 minutes while open.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) Cloud.sync('focus'); });
+  setInterval(() => { if (!document.hidden) Cloud.sync('poll'); }, 2 * 60 * 1000);
 })();

@@ -99,7 +99,7 @@ const Game = (() => {
   }
   /* Sum of all effects on equipped gear. */
   function gearStats() {
-    const out = { uniques: new Set() };
+    const out = { uniques: new Set(), taskXp: 0 };
     for (const k of Object.keys(EFFECTS)) out[k] = 0;
     if (!state) return out;
     for (const slot of Object.keys(SLOTS)) {
@@ -108,6 +108,8 @@ const Game = (() => {
       for (const e of it.effects || []) out[e.id] = (out[e.id] || 0) + e.value;
       if (it.unique) out.uniques.add(it.unique);
     }
+    const pet = activePet();
+    if (pet) for (const [k, v] of Object.entries(PETS[pet.id].bonus(pet.level))) out[k] = (out[k] || 0) + v;
     out.armor = Math.min(60, out.armor);
     return out;
   }
@@ -207,7 +209,12 @@ const Game = (() => {
     if (s.max && (state.consumables[id] || 0) >= s.max) return { ok: false, reason: 'max' };
     state.hero.gold -= price;
     const res = { ok: true, id };
-    if (id === 'potion' || id === 'shield') state.consumables[id] = (state.consumables[id] || 0) + 1;
+    if (id === 'egg') {
+      const left = Object.keys(PETS).filter(p => !state.pets[p]);
+      if (!left.length) { state.hero.gold += price; return { ok: false, reason: 'max' }; }
+      res.pet = pick(left);
+      state.pets[res.pet] = { status: 'egg', progress: 0, level: 0, xp: 0 };
+    } else if (id === 'potion' || id === 'shield') state.consumables[id] = (state.consumables[id] || 0) + 1;
     else {
       res.item = makeItem(level(), state.hero.difficulty, { minRarity: id === 'epic' ? 'epic' : 'common' });
       res.autoEquip = giveItem(res.item);
@@ -266,7 +273,7 @@ const Game = (() => {
       pool = shuffle(WORKOUTS).slice(0, count).map(w => ({ w, scale: 1 }));
     }
     const workouts = pool.map(({ w, scale }) => makeWorkout(w, lv, diff, scale));
-    state.tasks = state.tasks.filter(t => t.repeat === 'daily' || t.day === key);
+    state.tasks = state.tasks.filter(t => t.repeat !== 'once' || t.day === key);
     const ch = CHALLENGES[hashStr(key + state.hero.name) % CHALLENGES.length];
     const enemy = makeEnemy(lv, diff);
     if (rest) { enemy.sleeping = true; enemy.attack = 0; }
@@ -287,6 +294,14 @@ const Game = (() => {
     if (unit === 'min') return amount * 60;
     return 0;
   }
+  /* Is a custom quest on today's (or a given day's) list? */
+  function scheduledOn(t, key) {
+    if (t.repeat === 'once') return t.day === key;
+    if (t.repeat === 'days') return (t.days || []).includes(keyToDate(key).getDay());
+    return true;
+  }
+  const scheduleText = (t) => t.repeat === 'once' ? 'today only' : t.repeat === 'days' ? (t.days || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DAY_NAMES[i]).join('·') : '';
+
   function quests() {
     const d = state.day, diff = state.hero.difficulty;
     const list = d.workouts.map(w => ({
@@ -294,6 +309,7 @@ const Game = (() => {
       detail: `${w.amount} ${w.unit}`, xp: w.xp, generated: true, timer: timerSeconds(w.unit, w.amount),
     }));
     for (const t of state.tasks) {
+      if (!scheduledOn(t, d.key)) continue;
       const ex = t.kind === 'workout' && t.exId ? exerciseInfo(t.exId) : null;
       const amt = ex && t.amount ? `${t.amount} ${ex.unit} · ` : '';
       list.push({
@@ -301,12 +317,12 @@ const Game = (() => {
         attr: ex ? ex.attr : t.kind === 'workout' ? 'end' : 'dis',
         exId: ex && t.amount ? ex.id : undefined, amount: ex && t.amount ? t.amount : undefined,
         icon: t.forfeit ? '⚖️' : t.kind === 'workout' ? (ex && WORKOUTS.some(w => w.id === ex.id) ? ex.icon : '🏋️') : '📜',
-        detail: `${amt}${EFFORTS[t.effort].label}${t.repeat === 'once' ? ' · today only' : ''}`,
+        detail: `${amt}${EFFORTS[t.effort].label}${scheduleText(t) ? ' · ' + scheduleText(t) : ''}`, habit: !t.forfeit && t.repeat !== 'once',
         xp: effortXP(t.effort, d.level, diff), generated: false,
         timer: ex && t.amount ? timerSeconds(ex.unit, t.amount) : 0,
       });
     }
-    return list.map(q => ({ ...q, done: !!d.done[q.key], awarded: d.done[q.key]?.xp, crit: d.done[q.key]?.crit }));
+    return list.map(q => ({ ...q, done: !!d.done[q.key], awarded: d.done[q.key]?.xp, crit: d.done[q.key]?.crit, note: d.done[q.key]?.note }));
   }
   function challengeQuest() {
     const c = state.day.challenge;
@@ -395,7 +411,7 @@ const Game = (() => {
     const skill = q.kind === 'workout' ? state.skills.warrior : state.skills.scholar;
     const speed = q.quick && now <= q.speedUntil;
     const halfQuick = q.quick && quickFullLeft() === 0;
-    const mult = (1 + gearBonus() / 100 + skill * 0.05) * comboMult(d.combo) * critMult * (first ? 1.5 : 1) * (speed ? 1.25 : 1);
+    const mult = (1 + gearBonus() / 100 + skill * 0.05 + (q.kind === 'task' ? gs.taskXp / 100 : 0)) * comboMult(d.combo) * critMult * (first ? 1.5 : 1) * (speed ? 1.25 : 1);
     const xp = Math.round(q.xp * mult);
     const gold = Math.round((q.gold || Math.max(2, q.xp / 4)) * critMult * (1 + gs.gold / 100) * (halfQuick ? 0.5 : 1));
     const damage = Math.round(100 * (1 + gs.power / 100) * critMult * (first ? 2 : 1));
@@ -414,6 +430,30 @@ const Game = (() => {
     if (viaTimer) state.stats.timers++;
     if (q.challenge) state.stats.challenges++;
     if (q.quick) { d.quickDone = (d.quickDone || 0) + 1; state.stats.quick = (state.stats.quick || 0) + 1; }
+    // Habit tracking for your own repeating quests
+    if (q.habit && q.taskId) {
+      const h = habit(q.taskId), lvBefore = habitLevel(h.total);
+      h.total++;
+      const t = state.tasks.find(x => x.id === q.taskId);
+      if (t && t.amount) { if (h.since.amount !== t.amount) h.since = { amount: t.amount, count: 0, start: d.key }; h.since.count++; }
+      if (habitLevel(h.total) > lvBefore) events.push({ type: 'habitLevel', title: q.title, level: HABIT_LEVELS[habitLevel(h.total)] });
+    }
+    // Pets: the active pet gains XP, eggs incubate
+    const petEvents = [];
+    const ap = activePet();
+    if (ap && ap.level < PET_MAX_LEVEL) {
+      const p = state.pets[ap.id];
+      p.xp++;
+      d.done[key].pet = ap.id;
+      if (p.xp >= petXpNeed(p.level)) { p.xp = 0; p.level++; petEvents.push({ type: 'petLevel', id: ap.id, level: p.level }); }
+    }
+    d.done[key].eggs = [];
+    for (const [id, p] of Object.entries(state.pets)) {
+      if (p.status !== 'egg') continue;
+      p.progress++;
+      d.done[key].eggs.push(id);
+      if (p.progress >= PET_HATCH) { p.status = 'hatched'; p.level = 1; p.xp = 0; if (!state.look.pet) state.look.pet = id; petEvents.push({ type: 'petHatch', id }); }
+    }
     events.push({ type: 'xp', amount: xp, gold, crit, critMult, combo: d.combo, kind: q.kind, damage, healed, secondWind: first, speed, halfQuick });
     // A wandering monster rides along with some quick quests.
     const qq = q.quick && (d.quick || []).find(x => 'q:' + x.id === key);
@@ -486,6 +526,7 @@ const Game = (() => {
       const sp = Math.floor(lvAfter / 5) > Math.floor(lvBefore / 5);
       events.push({ type: 'levelup', from: lvBefore, to: lvAfter, skillPoint: sp });
     }
+    events.push(...petEvents);
     const perfect = quests().every(x => x.done);
     events.push(...checkAchievements({ perfect, hour: new Date().getHours() }));
     save();
@@ -513,6 +554,16 @@ const Game = (() => {
       if (state.day.bonusXP) { state.hero.totalXP = Math.max(0, state.hero.totalXP - state.day.bonusXP); state.day.bonusXP = 0; }
       if (state.day.streakCounted) { state.day.streakCounted = false; state.hero.streak = Math.max(0, state.hero.streak - 1); }
     }
+    if (key.startsWith('t:') && state.habits[key.slice(2)]) {
+      const h = state.habits[key.slice(2)];
+      h.total = Math.max(0, h.total - 1);
+      if (h.since && h.since.count) h.since.count--;
+    }
+    if (e.pet && state.pets[e.pet]) {
+      const p = state.pets[e.pet];
+      if (p.xp > 0) p.xp--; else if (p.level > 1) { p.level--; p.xp = petXpNeed(p.level) - 1; }
+    }
+    for (const id of e.eggs || []) { const p = state.pets[id]; if (p && p.status === 'egg') p.progress = Math.max(0, p.progress - 1); }
     state.day.combo = 0;
     state.hero.hp = Math.min(state.hero.hp, heroMaxHP());
     save();
@@ -597,10 +648,12 @@ const Game = (() => {
     return { exId, amount: cleanAmount(amount) };
   }
 
-  function addTask({ title, effort, kind, repeat, exId, amount, customName, customUnit }) {
+  function cleanDays(days) { return [...new Set((days || []).map(Number).filter(n => n >= 0 && n <= 6))]; }
+  function addTask({ title, effort, kind, repeat, days, exId, amount, customName, customUnit }) {
     title = String(title || '').trim().slice(0, 80);
     if (!title) return null;
-    const t = { id: uid(), title, effort: EFFORTS[effort] ? effort : 'medium', kind: kind === 'workout' ? 'workout' : 'task', repeat: repeat === 'once' ? 'once' : 'daily', day: todayKey() };
+    const t = { id: uid(), title, effort: EFFORTS[effort] ? effort : 'medium', kind: kind === 'workout' ? 'workout' : 'task', repeat: ['once', 'days'].includes(repeat) ? repeat : 'daily', day: todayKey() };
+    if (t.repeat === 'days') { t.days = cleanDays(days); if (!t.days.length) t.repeat = 'daily'; }
     if (t.kind === 'workout') Object.assign(t, resolveExercise({ exId, amount, customName, customUnit }), { linkAsked: true });
     state.tasks.push(t);
     save();
@@ -612,6 +665,11 @@ const Game = (() => {
     if (patch.title != null && String(patch.title).trim()) t.title = String(patch.title).trim().slice(0, 80);
     if (patch.effort && EFFORTS[patch.effort]) t.effort = patch.effort;
     if (t.kind === 'workout' && 'exId' in patch) Object.assign(t, resolveExercise(patch));
+    if (patch.repeat && t.repeat !== 'once') {
+      t.repeat = patch.repeat === 'days' ? 'days' : 'daily';
+      t.days = t.repeat === 'days' ? cleanDays(patch.days) : undefined;
+      if (t.repeat === 'days' && !t.days.length) t.repeat = 'daily';
+    }
     t.linkAsked = true;
     save();
     return t;
@@ -634,6 +692,141 @@ const Game = (() => {
     return true;
   }
 
+  /* ---------- habits ---------- */
+  function habit(id) {
+    state.habits[id] = state.habits[id] || { streak: 0, best: 0, total: 0, log: [], since: { amount: null, count: 0, start: null }, snoozeUntil: null };
+    return state.habits[id];
+  }
+  function habitLevel(total) { let i = 0; HABIT_LEVELS.forEach((l, k) => { if (total >= l.n) i = k; }); return i; }
+  /* Streak, success rate (last 30 days) and level for one of your own quests. */
+  function habitInfo(id) {
+    const h = state.habits[id] || { streak: 0, best: 0, total: 0, log: [] };
+    const t = state.tasks.find(x => x.id === id);
+    const today = state.day.key;
+    const doneToday = !!state.day.done['t:' + id];
+    const recent = h.log.filter(([k]) => daysBetween(k, today) <= 30);
+    let ok = recent.filter(([, v]) => v).length, n = recent.length;
+    if (t && scheduledOn(t, today) && doneToday) { ok++; n++; }
+    const streak = h.streak + (doneToday ? 1 : 0);
+    const lv = habitLevel(h.total);
+    const next = HABIT_LEVELS[lv + 1];
+    return { streak, best: Math.max(h.best, streak), total: h.total, rate: n ? Math.round(ok / n * 100) : null, tracked: n, level: HABIT_LEVELS[lv], next, toNext: next ? next.n - h.total : 0 };
+  }
+  /* Called while settling a day: log done/missed for every habit that was scheduled. */
+  function logHabits(dayKey, doneMap) {
+    for (const t of state.tasks) {
+      if (t.repeat === 'once' || t.forfeit || !scheduledOn(t, dayKey)) continue;
+      const h = habit(t.id), ok = !!(doneMap && doneMap['t:' + t.id]);
+      h.log.push([dayKey, ok ? 1 : 0]);
+      h.log = h.log.slice(-90);
+      h.streak = ok ? h.streak + 1 : 0;
+      h.best = Math.max(h.best, h.streak);
+    }
+  }
+
+  /* ---------- notes ---------- */
+  function setNote(key, text) {
+    const e = state.day.done[key];
+    if (!e) return false;
+    text = String(text || '').trim().slice(0, 280);
+    if (text) e.note = text; else delete e.note;
+    save();
+    return true;
+  }
+  /* Everything completed today, with titles and notes (stored in the history when the day ends). */
+  function dayItems() {
+    const titles = {};
+    for (const q of [...quests(), challengeQuest(), ...quickQuests()]) titles[q.key] = { t: q.title, i: q.icon };
+    return Object.entries(state.day.done).sort((a, b) => a[1].at - b[1].at).map(([k, e]) => ({
+      t: (titles[k] || {}).t || 'Quest', i: (titles[k] || {}).i || '✅', k: e.kind, n: e.note || undefined, q: e.quick ? 1 : undefined,
+    }));
+  }
+  function dayReps(day) {
+    const reps = {};
+    for (const e of Object.values(day.done)) if (e.exId && e.amount) reps[e.exId] = Math.round(((reps[e.exId] || 0) + e.amount) * 10) / 10;
+    return reps;
+  }
+
+  /* ---------- weekly review ---------- */
+  function weekReview(wk) {
+    const days = state.history.filter(h => weekKey(h.key) === wk);
+    if (!days.length) return null;
+    const reps = {};
+    for (const h of days) for (const [k, v] of Object.entries(h.reps || {})) reps[k] = Math.round(((reps[k] || 0) + v) * 10) / 10;
+    const best = days.slice().sort((a, b) => b.done - a.done)[0];
+    const slipped = [];
+    for (const t of state.tasks) {
+      const h = state.habits[t.id];
+      if (!h) continue;
+      const entries = h.log.filter(([k]) => weekKey(k) === wk);
+      const missed = entries.filter(([, v]) => !v).length;
+      if (entries.length && missed >= 2) slipped.push({ id: t.id, title: t.title, missed, scheduled: entries.length });
+    }
+    slipped.sort((a, b) => b.missed / b.scheduled - a.missed / a.scheduled);
+    const strong = state.tasks.filter(t => { const h = state.habits[t.id]; if (!h) return false; const e = h.log.filter(([k]) => weekKey(k) === wk); return e.length >= 3 && e.every(([, v]) => v); }).map(t => t.title);
+    return {
+      week: wk, days: days.length, wins: days.filter(h => h.met).length, losses: days.filter(h => !h.met).length,
+      quests: days.reduce((a, h) => a + (h.done || 0), 0), workouts: days.reduce((a, h) => a + (h.workouts || 0), 0),
+      reps, best: best ? { key: best.key, done: best.done } : null, slipped: slipped.slice(0, 3), strong: strong.slice(0, 3),
+    };
+  }
+  function lastWeekKey() { const d = keyToDate(weekKey()); d.setDate(d.getDate() - 7); return todayKey(d); }
+
+  /* ---------- progressive overload ---------- */
+  function bumpAmount(a, unit) {
+    if (unit === 'km') return Math.round((a + 0.5) * 10) / 10;
+    if (unit === 'min') return a + Math.max(1, Math.round(a * 0.15));
+    if (unit === 'sec') return Math.ceil((a + Math.max(5, a * 0.15)) / 5) * 5;
+    const n = a + Math.max(2, Math.round(a * 0.15));
+    return n >= 20 ? Math.ceil(n / 5) * 5 : n;
+  }
+  /* A custom workout done 10+ times at the same amount → suggest a little more. */
+  function overloadSuggestion() {
+    const today = state.day.key;
+    for (const t of state.tasks) {
+      if (t.kind !== 'workout' || !t.exId || !t.amount || t.repeat === 'once') continue;
+      const h = state.habits[t.id];
+      if (!h || !h.since || h.since.amount !== t.amount || h.since.count < 10) continue;
+      if (h.snoozeUntil && h.snoozeUntil > today) continue;
+      const ex = exerciseInfo(t.exId);
+      if (!ex) continue;
+      return { id: t.id, title: t.title, count: h.since.count, from: t.amount, to: bumpAmount(t.amount, ex.unit), unit: ex.unit, exName: ex.name, since: h.since.start };
+    }
+    return null;
+  }
+  function acceptOverload(id, amount) {
+    const t = state.tasks.find(x => x.id === id);
+    if (!t) return;
+    t.title = t.title.replace(String(t.amount), String(amount));
+    t.amount = amount;
+    habit(id).since = { amount, count: 0, start: todayKey() };
+    save();
+  }
+  function snoozeOverload(id) { const d = keyToDate(todayKey()); d.setDate(d.getDate() + 7); habit(id).snoozeUntil = todayKey(d); save(); }
+
+  /* ---------- pets ---------- */
+  function activePet() {
+    const id = state && state.look && state.look.pet;
+    const p = id && state.pets && state.pets[id];
+    return p && p.status === 'hatched' ? { id, ...p } : null;
+  }
+  /* Grant eggs for pets whose condition you've reached. */
+  function checkEggs() {
+    const out = [];
+    for (const [id, P] of Object.entries(PETS)) {
+      if (state.pets[id]) continue;
+      let ok = false;
+      try { ok = P.test(state); } catch { ok = false; }
+      if (ok) { state.pets[id] = { status: 'egg', progress: 0, level: 0, xp: 0 }; out.push({ type: 'egg', id }); }
+    }
+    return out;
+  }
+  function setPet(id) {
+    if (id && (!state.pets[id] || state.pets[id].status !== 'hatched')) return;
+    state.look.pet = id || null;
+    save();
+  }
+
   /* ---------- achievements ---------- */
   function checkAchievements(extra = {}) {
     const gs = gearStats();
@@ -645,6 +838,7 @@ const Game = (() => {
       try { ok = a.test(state, ctx); } catch { ok = false; }
       if (ok) { state.achievements[a.id] = todayKey(); out.push({ type: 'achievement', ach: a }); }
     }
+    out.push(...checkEggs());
     if (out.length) save();
     return out;
   }
@@ -660,7 +854,7 @@ const Game = (() => {
     if ('hairColor' in patch) L.hairColor = clamp(+patch.hairColor, 0, LOOKS.hairColors.length - 1);
     if ('skin' in patch) L.skin = clamp(+patch.skin, 0, LOOKS.skins.length - 1);
     if ('cape' in patch) { const c = LOOKS.capes.find(x => x.id === patch.cape); L.cape = c && lookUnlocked(c.req) ? c.id : null; }
-    if ('pet' in patch) { const p = LOOKS.pets.find(x => x.id === patch.pet); L.pet = p && lookUnlocked(p.req) ? p.id : null; }
+    if ('pet' in patch) { L.pet = patch.pet && state.pets[patch.pet] && state.pets[patch.pet].status === 'hatched' ? patch.pet : null; }
     save();
   }
 
@@ -705,7 +899,8 @@ const Game = (() => {
     const d = state.day;
     const report = { days: [], damage: 0, knockouts: 0, xpLost: 0, stolen: [], penalty: null, shieldUsed: 0 };
     const p = progress(d);
-    state.history.push({ key: d.key, met: p.met, workouts: p.workouts, tasks: p.tasks, done: p.workouts + p.tasks, enemy: d.enemy.name, rest: !!d.rest });
+    state.history.push({ key: d.key, met: p.met, workouts: p.workouts, tasks: p.tasks, done: p.workouts + p.tasks, enemy: d.enemy.name, rest: !!d.rest, items: dayItems(), reps: dayReps(d) });
+    logHabits(d.key, d.done);
     if (p.met) {
       const heal = d.rest ? Math.round(heroMaxHP() * 0.4) : Math.round(heroMaxHP() * 0.25);
       state.hero.hp = Math.min(heroMaxHP(), state.hero.hp + heal);
@@ -720,6 +915,8 @@ const Game = (() => {
     }
     const missed = Math.min(3, daysBetween(d.key, today) - 1);
     for (let i = 0; i < missed; i++) {
+      const sk = keyToDate(d.key); sk.setDate(sk.getDate() + i + 1);
+      logHabits(todayKey(sk), null);
       const e = makeEnemy(level(), state.hero.difficulty);
       loseStreak(report);
       const dmg = damageHero(e.attack, report);
@@ -733,7 +930,9 @@ const Game = (() => {
     const key = todayKey();
     if (!state.day) { newDay(key); ensureBoss(key); save(); return null; }
     if (state.day.key === key) { ensureBoss(key); return null; }
+    const oldKey = state.day.key;
     const report = settleDays(key);
+    if (weekKey(oldKey) !== weekKey(key)) report.review = weekReview(weekKey(oldKey));
     ensureBoss(key, report);
     newDay(key);
     const pen = state.motivation.penalty.trim();
@@ -778,6 +977,13 @@ const Game = (() => {
     s.stats = { workouts: 0, tasks: 0, enemies: 0, crits: 0, bosses: 0, chests: 0, potions: 0, challenges: 0, goldEarned: 0, maxCombo: 0, swaps: 0, timers: 0, earlyWins: 0, reps: {}, ...(s.stats || {}) };
     s.bestiary ??= {};
     s.customExercises ??= {};
+    s.habits ??= {};
+    s.meta ??= { updatedAt: Date.now() };
+    if (!s.pets) {
+      s.pets = {};
+      // Keep the pet you already had; the others are now earned as eggs.
+      if (s.look && s.look.pet) s.pets[s.look.pet] = { status: 'hatched', level: 1, xp: 0 };
+    }
     s.achievements ??= {};
     s.look = { hair: 0, hairColor: 0, skin: 0, cape: null, pet: null, ...(s.look || {}) };
     s.settings = { restDay: null, reminders: false, reminderTime: '18:00', lastReminded: null, taunts: 'normal', jumpToBattle: true, ...(s.settings || {}) };
@@ -831,11 +1037,25 @@ const Game = (() => {
       const s = JSON.parse(raw);
       if (!validSave(s)) return false;
       state = migrate(s);
-      save();
+      save(false);
       return true;
     } catch { return false; }
   }
-  function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } }
+  let saveHook = null;
+  function onSave(fn) { saveHook = fn; }
+  function save(touch = true) {
+    if (!state) return;
+    if (touch) { state.meta = state.meta || {}; state.meta.updatedAt = Date.now(); }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* storage unavailable */ }
+    if (touch && saveHook) { try { saveHook(state); } catch { /* ignore */ } }
+  }
+  /* Replace the whole save with one from the cloud (keeps its timestamp, doesn't trigger an upload). */
+  function replaceState(s) {
+    if (!validSave(s)) return false;
+    state = migrate(s);
+    save(false);
+    return true;
+  }
   function reset() { try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ } state = null; }
   function exportData() { return JSON.stringify({ app: 'questfit', exported: new Date().toISOString(), save: state }); }
   function importData(text) {
@@ -864,7 +1084,8 @@ const Game = (() => {
     gearBonus, gearStats, reforge, reforgePrice, setInfo, equippedItem, sellPrice, critChance, comboMult, comboActive, comboLeftMs,
     quests, challengeQuest, quickQuests, rollQuick, acceptQuick, removeQuick, quickFullLeft, payGold, progress, complete, undo, swapWorkout, openChest, addTask, removeTask, equip, discard,
     buy, shopPrice, usePotion, skillPoints, spendSkill, resetSkills, lookUnlocked, setLook, checkAchievements,
-    exerciseInfo, allExercises, resolveExercise, detectExercise, updateTask, unlinkedWorkouts, dismissLinking, addReps,
+    exerciseInfo, allExercises, resolveExercise, scheduledOn, habitInfo, setNote, dayItems, weekReview, lastWeekKey,
+    overloadSuggestion, acceptOverload, snoozeOverload, activePet, setPet, onSave, replaceState, detectExercise, updateTask, unlinkedWorkouts, dismissLinking, addReps,
     stakes, setMotivation, hasMotivation, setSetting, ensureToday, start, load, reset, exportData, importData,
     setDifficulty, rename, workoutAmount,
   };

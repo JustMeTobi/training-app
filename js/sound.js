@@ -4,8 +4,11 @@
 const Sound = (() => {
   const KEY = 'questfit.muted';
   let ctx = null;
+  const PREFS = 'questfit.soundPrefs';
   let muted = false;
-  try { muted = localStorage.getItem(KEY) === '1'; } catch { /* storage unavailable */ }
+  let prefs = { volume: 0.8, sfx: true, voice: true };
+  try { muted = localStorage.getItem(KEY) === '1'; prefs = { ...prefs, ...JSON.parse(localStorage.getItem(PREFS) || '{}') }; } catch { /* storage unavailable */ }
+  const level = () => Math.max(0.0001, prefs.volume);
 
   function ac() {
     if (!ctx) {
@@ -26,7 +29,7 @@ const Sound = (() => {
     osc.frequency.setValueAtTime(freq, start);
     if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), start + dur);
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(vol, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * level()), start + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
     osc.connect(gain).connect(a.destination);
     osc.start(start);
@@ -40,7 +43,7 @@ const Sound = (() => {
     for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
     const src = a.createBufferSource(), gain = a.createGain(), filter = a.createBiquadFilter();
     filter.type = 'lowpass'; filter.frequency.value = 1800;
-    src.buffer = buf; gain.gain.value = vol;
+    src.buffer = buf; gain.gain.value = vol * level();
     src.connect(filter).connect(gain).connect(a.destination);
     src.start(a.currentTime + t);
   }
@@ -109,7 +112,8 @@ const Sound = (() => {
   };
 
   function play(name, arg) {
-    if (muted || !sounds[name]) return;
+    if (muted || !sounds[name] || prefs.volume <= 0) return;
+    if (name === 'blip' ? !prefs.voice : !prefs.sfx) return;
     try { sounds[name](arg); } catch { /* audio unavailable */ }
   }
   function setMuted(m) {
@@ -117,5 +121,9 @@ const Sound = (() => {
     try { localStorage.setItem(KEY, muted ? '1' : '0'); } catch { /* ignore */ }
   }
 
-  return { play, setMuted, get muted() { return muted; } };
+  function setPrefs(p) {
+    prefs = { ...prefs, ...p };
+    try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch { /* ignore */ }
+  }
+  return { play, setMuted, setPrefs, get prefs() { return { ...prefs }; }, get muted() { return muted; } };
 })();

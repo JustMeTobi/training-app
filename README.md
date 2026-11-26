@@ -43,7 +43,21 @@ Open `index.html` in a browser, or host it free on **GitHub Pages** (Settings �
 - 😴 **Rest day:** pick a weekday. The enemy sleeps and one light activity keeps your streak.
 - 📅 **Calendar, weekly chart and lifetime totals.**
 
+**Habits**
+- 📅 **Weekday quests:** your own quests can repeat every day, on certain weekdays (e.g. Gym on Mon/Wed/Fri) or today only.
+- 🔥 **Streaks per habit** with a 30-day success rate, and **habit levels** (🥉 7, 🥈 30, 🥇 100, 💎 365 completions). See Journey → My habits.
+- 📝 **Notes** on finished quests; tap a day in the calendar to see what you did and your notes.
+- 📊 **Weekly review** every Monday: wins, quests, top exercises, perfect habits, and tips for habits that slipped.
+- 💪 **Progressive overload:** after doing a workout 10 times at the same amount, the app suggests a little more (you decide).
+
+**Pets**
+- 🐾 Pets hatch from **eggs** you earn (3-day streak, 7-day streak, 50 tasks, a wandering monster, 3 weekly bosses) or buy as a mystery egg. An egg hatches after 10 quests.
+- Pets **grow to level 10** as you complete quests with them, giving a bonus that grows each level (gold, healing, crit, task XP or boss damage), and get bigger at levels 5 and 10.
+
 **Practical**
+- ☁️ **Cloud sync** between phone and computer with a free Supabase database. See [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+- ❓ **Help and tour:** a first-time tour, plus help for every feature behind the ❓ button.
+- 🔊 **Volume slider** and separate switches for sound effects and the enemy's talking blips.
 - 📲 Installable app that works offline.
 - 🔔 Daily reminder notification if the enemy isn't beaten by a time you choose.
 - 🔄 **Backup and sync** between devices with a sync code or a backup file (Journey → Backup & sync).
@@ -63,5 +77,7 @@ js/art.js       pixel-style SVG hero, pets and enemies
 js/sound.js     retro sound effects (Web Audio, no files)
 js/taunts.js    enemy taunt lines and personalities
 js/arena.js     animated battle scene
+js/cloud.js     cloud sync (Supabase)
+js/cloud-config.js  optional Supabase URL + anon key for all devices
 js/ui.js        rendering and interaction
 ```
