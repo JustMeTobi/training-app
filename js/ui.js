@@ -62,6 +62,28 @@
       </div>`;
   }
 
+  /* ---------- jump to the battle when a quest is done ---------- */
+  /* If the arena is off-screen, scroll it into view, play the attack, then return to where you were. */
+  function withArenaInView(run) {
+    const arena = document.getElementById('arena');
+    const enabled = Game.state.settings.jumpToBattle !== false && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!arena || !enabled) { run(); return; }
+    const header = document.querySelector('.topbar').offsetHeight;
+    const r = arena.getBoundingClientRect();
+    const visible = r.top >= header - 10 && r.bottom <= window.innerHeight + 10;
+    if (visible) { run(); return; }
+    const back = window.scrollY;
+    const target = Math.max(0, window.scrollY + r.top - header - 12);
+    window.scrollTo({ top: target, behavior: 'smooth' });
+    setTimeout(() => {
+      run();
+      Arena.whenIdle().then(() => setTimeout(() => {
+        // Only scroll back if you haven't scrolled somewhere else yourself, and no popup is open.
+        if (Math.abs(window.scrollY - target) < 80 && !$('#modal-root').children.length) window.scrollTo({ top: back, behavior: 'smooth' });
+      }, 900));
+    }, 420);
+  }
+
   /* ---------- enemy voice ---------- */
   let lastTauntAt = 0, lastActivity = Date.now();
   function tauntCtx() {
@@ -675,6 +697,7 @@
           </div>
           <small class="muted">${notifState === 'unsupported' ? 'This browser does not support notifications.' : notifState === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser settings.' : 'Works while the app is open or running in the background. Install the app for the best results.'}</small>
         </div>
+        <label class="switch field"><input type="checkbox" id="jump-battle" ${st.jumpToBattle !== false ? 'checked' : ''}><span>🏟️ Scroll up to the battle scene when I finish a quest</span></label>
         <label class="field"><span>💬 Enemy taunts</span>
           <select id="taunt-mode">${[['off', 'Off'], ['normal', 'Normal'], ['savage', '🔥 Savage (harsh and personal)']].map(([v, l]) => `<option value="${v}" ${(st.taunts || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <div class="field"><span>Real-life motivation</span><div><button class="btn btn-ghost" id="reasons-btn2">🎯 Edit reason, rewards & forfeit</button></div></div>
@@ -1141,7 +1164,7 @@
       const events = Game.complete(key, { viaTimer: true });
       renderAll();
       const row = document.querySelector(`[data-key="${CSS.escape(key)}"] .xp-chip`) || $('#hero-art');
-      handleEvents(events, row);
+      withArenaInView(() => handleEvents(events, row));
       toast('⏱️ Time! Quest complete', 'gold');
     };
     btn.addEventListener('click', () => {
@@ -1325,11 +1348,11 @@
         const key = c.dataset.complete;
         const li = c.closest('.quest');
         li.classList.add('completing');
-        const rect = li.querySelector('.xp-chip').getBoundingClientRect();
-        const ghost = { getBoundingClientRect: () => rect };
+        const rect = li.querySelector('.xp-chip').getBoundingClientRect(), capY = window.scrollY;
+        const ghost = { getBoundingClientRect: () => ({ left: rect.left, width: rect.width, top: rect.top + capY - window.scrollY }) };
         const events = Game.complete(key);
         justDone = key;
-        setTimeout(() => { renderAll(); justDone = null; handleEvents(events, ghost); }, 280);
+        setTimeout(() => { renderAll(); justDone = null; floatText(ghost, '✓', 'xp'); withArenaInView(() => handleEvents(events, ghost)); }, 280);
         return;
       }
       if (e.target.closest('#chest-btn')) { openChestFlow(); return; }
@@ -1454,6 +1477,7 @@
     $('#tab-journey').addEventListener('change', async (e) => {
       if (e.target.id === 'import-input' && e.target.files[0]) importFile(e.target.files[0]);
       if (e.target.id === 'rest-day') { Game.setSetting('restDay', e.target.value === '' ? null : Number(e.target.value)); toast(e.target.value === '' ? 'No rest day' : '😴 Rest day saved — starts from the next one'); }
+      if (e.target.id === 'jump-battle') { Game.setSetting('jumpToBattle', e.target.checked); toast(e.target.checked ? '🏟️ Jumping to the battle is on' : 'Jumping to the battle is off'); }
       if (e.target.id === 'taunt-mode') { Game.setSetting('taunts', e.target.value); if (e.target.value === 'off') Arena.hideBubble(); else greet(); toast(e.target.value === 'off' ? '🤐 Taunts off' : e.target.value === 'savage' ? '🔥 Savage taunts on. You asked for it.' : '💬 Taunts on'); }
       if (e.target.id === 'remind-time') Game.setSetting('reminderTime', e.target.value || '18:00');
       if (e.target.id === 'remind-on') {

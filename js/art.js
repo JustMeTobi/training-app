@@ -34,13 +34,13 @@ const Art = (() => {
     if (b === 'Axe') {
       s += r(50, 14, 3, 42, '#6b4423') + `<path d="M53 15 L62 11 L63 29 L53 25 Z" fill="${c}"/><path d="M61 12 L63 12 L63 29 L61 28 Z" fill="#fff" opacity=".45"/><path d="M50 17 L45 20 L50 23 Z" fill="${d}"/>` + r(56, 18, 3, 3, gem);
     } else if (b === 'Hammer') {
-      s += r(50, 20, 3, 36, '#6b4423') + r(42, 11, 19, 11, c) + r(42, 11, 19, 2, '#fff', 'opacity=".35"') + r(45, 11, 2, 11, d) + r(56, 11, 2, 11, d) + r(50, 14, 3, 4, gem);
+      s += r(50, 18, 3, 40, '#6b4423') + r(46, 9, 17, 11, c) + r(46, 9, 17, 2, '#fff', 'opacity=".35"') + r(48, 9, 2, 11, d) + r(59, 9, 2, 11, d) + r(53, 12, 3, 4, gem);
     } else if (b === 'Blade') {
       s += `<path d="M50 48 Q46 30 55 10 L57 11 Q52 30 53 48 Z" fill="${c}"/><path d="M52 47 Q49 30 56 11 L57 11 Q52 30 53 47 Z" fill="#fff" opacity=".4"/>` + r(46, 47, 10, 3, d) + r(49, 50, 4, 6, '#3f2a17') + r(48, 56, 6, 2, gem);
     } else {
       s += r(49, 15, 4, 33, c) + r(50, 15, 2, 33, '#fff', 'opacity=".35"') + `<path d="M49 15 L51 11 L53 15 Z" fill="${c}"/>` + r(45, 47, 12, 3, d) + r(49, 50, 4, 6, '#5b3a1e') + r(48, 56, 6, 2, gem);
     }
-    return `<g class="weapon">${fx(it, s, [[57, 14], [44, 24], [58, 34]])}</g>`;
+    return `<g class="weapon"><g transform="translate(-4 0)">${fx(it, s, [[57, 14], [44, 24], [58, 34]])}</g></g>`;
   }
 
   function drawHelmet(it) {
@@ -146,7 +146,7 @@ const Art = (() => {
     if (showHair) s += hair(style, hairC, crown);
     if (helmet) s += drawHelmet(helmet);
     if (shield) s += drawShield(shield);
-    if (weapon) s += drawWeapon(weapon);
+    if (weapon) s += drawWeapon(weapon) + r(43, 50, 6, 5, skin) + r(43, 52, 6, 1, '#000', 'opacity=".18"');
     if (look.pet) s += pet(look.pet);
     return `<svg viewBox="-16 0 96 80" class="hero-svg" shape-rendering="crispEdges" role="img" aria-label="Your character">${s}</svg>`;
   }

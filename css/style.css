@@ -102,7 +102,7 @@ h3 { font-size: 1rem; margin: 0; }
 .hero-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .3rem; }
 .hero-art.attack .hero-svg { animation: attack .45s ease-out; }
 .aura { animation: pulse 2.4s ease-in-out infinite; }
-.weapon { transform-box: view-box; transform-origin: 67px 52px; }
+.weapon { transform-box: view-box; transform-origin: 63px 53px; }
 .hero-art.attack .weapon { animation: swing .45s ease-out; }
 
 /* ---------- battle ---------- */
