@@ -873,12 +873,14 @@ grant select, insert, update on public.saves to authenticated;`;
           <div class="btn-row"><button class="btn btn-primary" type="submit" name="act" value="in">Log in</button><button class="btn btn-ghost" type="submit" name="act" value="up">Create account</button></div>
         </form>
         <p class="tiny cloud-status" id="cloud-status">${cloudStatusText(ci)}</p>
-        <button type="button" class="link-btn tiny" id="cloud-reset">Change Supabase project</button>`;
+        <p class="muted tiny">Use the email and password from the app, not a login link from the Supabase website. Project: ${esc(ci.host)}</p>
+        ${ci.builtIn ? '' : '<button type="button" class="link-btn tiny" id="cloud-reset">Change Supabase project</button>'}`;
     }
     return `${head}
       <p>Logged in as <b>${esc(ci.email)}</b></p>
       <p class="cloud-status" id="cloud-status">${cloudStatusText(ci)}</p>
       <p class="muted tiny">Changes upload a few seconds after you make them, and the app checks for changes from your other device whenever you open it.</p>
+      <p class="muted tiny">Project: ${esc(ci.host)}</p>
       <div class="btn-row"><button class="btn btn-primary btn-small" id="cloud-sync">🔄 Sync now</button><button class="btn btn-ghost btn-small" id="cloud-logout">Log out</button></div>`;
   }
   function renderCloudCard() { const c = document.getElementById('cloud-card'); if (c) c.innerHTML = cloudCardHTML(); }

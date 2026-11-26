@@ -19,7 +19,9 @@ const Cloud = (() => {
     const file = window.QUESTFIT_CLOUD || {};
     let saved = {};
     try { saved = JSON.parse(read(CFG_KEY, '{}')); } catch { saved = {}; }
-    return { url: (saved.url || file.url || '').trim(), anonKey: (saved.anonKey || file.anonKey || '').trim() };
+    // The project built into the app always wins; typed-in details are only used when none is built in.
+    if (file.url && file.anonKey) return { url: file.url.trim(), anonKey: file.anonKey.trim(), builtIn: true };
+    return { url: (saved.url || '').trim(), anonKey: (saved.anonKey || '').trim(), builtIn: false };
   }
   const configured = () => { const c = config(); return /^https:\/\/.+/.test(c.url) && c.anonKey.length > 20; };
   function setConfig(url, anonKey) { write(CFG_KEY, JSON.stringify({ url: String(url || '').trim(), anonKey: String(anonKey || '').trim() })); client = null; }
@@ -27,7 +29,7 @@ const Cloud = (() => {
   const setLastSync = (ms) => write(SYNC_KEY, String(ms));
 
   function setStatus(s, err = '') { status = s; lastError = err; listeners.forEach(fn => { try { fn(info()); } catch { /* ignore */ } }); }
-  function info() { return { status, error: lastError, email: user && user.email, configured: configured(), lastSync: lastSync() }; }
+  function info() { const c = config(); let host = ''; try { host = c.url ? new URL(c.url).host : ''; } catch { host = ''; } return { status, error: lastError, email: user && user.email, configured: configured(), lastSync: lastSync(), host, builtIn: !!c.builtIn }; }
   function onChange(fn) { listeners.push(fn); }
 
   function loadLib() {

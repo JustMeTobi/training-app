@@ -1,5 +1,5 @@
 /* QuestFit service worker: caches the app so it works offline. Bump VERSION when files change. */
-const VERSION = 'questfit-v8';
+const VERSION = 'questfit-v9';
 const FILES = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/data.js', './js/game.js', './js/art.js', './js/sound.js', './js/taunts.js', './js/arena.js', './js/cloud-config.js', './js/cloud.js', './js/ui.js',
@@ -16,7 +16,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request).then(res => {
+    // Always ask the server for a fresh copy (skips the browser's 10-minute cache), use the cache only offline.
+    fetch(e.request, new URL(e.request.url).origin === location.origin ? { cache: 'no-cache' } : {}).then(res => {
       if (res.ok && new URL(e.request.url).origin === location.origin) {
         const copy = res.clone();
         caches.open(VERSION).then(c => c.put(e.request, copy));
