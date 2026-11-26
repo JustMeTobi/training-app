@@ -824,7 +824,9 @@
 alter table public.saves enable row level security;
 create policy "read own save" on public.saves for select using (auth.uid() = user_id);
 create policy "insert own save" on public.saves for insert with check (auth.uid() = user_id);
-create policy "update own save" on public.saves for update using (auth.uid() = user_id) with check (auth.uid() = user_id);`;
+create policy "update own save" on public.saves for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+revoke all on public.saves from anon;
+grant select, insert, update on public.saves to authenticated;`;
   function timeAgo(ms) {
     if (!ms) return 'never';
     const s = Math.round((Date.now() - ms) / 1000);

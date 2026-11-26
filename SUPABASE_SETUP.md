@@ -20,9 +20,11 @@ alter table public.saves enable row level security;
 create policy "read own save" on public.saves for select using (auth.uid() = user_id);
 create policy "insert own save" on public.saves for insert with check (auth.uid() = user_id);
 create policy "update own save" on public.saves for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+revoke all on public.saves from anon;
+grant select, insert, update on public.saves to authenticated;
 ```
 
-The policies mean each account can only read and change its own save.
+The policies mean each account can only read and change its own save. The last two lines give logged-in players access to the table (newer Supabase projects don't do this automatically) and remove all access for people who aren't logged in.
 
 ## 3. (Recommended) Turn off email confirmation
 **Authentication** → **Sign In / Providers** → **Email** → turn off **Confirm email**. Then "Create account" in the app logs you in straight away. If you leave it on, you'll get a confirmation email first.

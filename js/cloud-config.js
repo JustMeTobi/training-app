@@ -5,6 +5,6 @@
  * You can also leave these empty and enter them in the app under Journey → Cloud sync.
  */
 window.QUESTFIT_CLOUD = {
-  url: '',      // e.g. 'https://abcdefgh.supabase.co'
-  anonKey: '',  // the long "anon public" key from Project Settings → API
+  url: 'https://dsjlwhpassdlqxpacdyh.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzamx3aHBhc3NkbHF4cGFjZHloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2OTc3MDIsImV4cCI6MjExMTI3MzcwMn0.uBvu4jLgeh-YFK0XZSpnvAcmBR4VOfDkH72lgoQESZs',
 };
