@@ -9,7 +9,8 @@
   let editingTasks = false;
   let addOpen = false;
   let justDone = null;
-  let calOffset = 0;            // months back from the current month
+  let calOffset = 0;
+  let backpackFilter = 'all';     // gear tab: which slot the backpack shows            // months back from the current month
   let installPrompt = null;     // beforeinstallprompt event
 
   /* ================= top-level render ================= */
@@ -348,10 +349,10 @@
       </div>
       ${addOpen ? addForm() : ''}
       ${upcomingHTML()}
-      ${done.length ? `<div class="group done-group">
-        <div class="group-head"><h3>✅ Completed today</h3><span class="req ok">${done.length} done</span></div>
+      ${done.length ? `<details class="group done-group fold-group" data-fold="done" ${folds.done === false ? '' : 'open'}>
+        <summary class="group-head"><h3>✅ Completed today</h3><span class="req ok">${done.length} done</span></summary>
         <ul class="quest-list">${done.map(questRow).join('')}</ul>
-      </div>` : ''}`;
+      </details>` : ''}`;
   }
 
   /* Exercise + amount fields shared by the add form, edit popup and link popup. */
@@ -440,6 +441,19 @@
     </form>`;
   }
 
+  /* ================= foldable sections ================= */
+  /* A card you can fold in and out by tapping its title; the open/closed choice is remembered. */
+  const FOLD_KEY = 'questfit.folds';
+  let folds = {};
+  try { folds = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}'); } catch { folds = {}; }
+  function fold(id, title, right, body, { open = true, cls = '', tag = 'details', elId = '' } = {}) {
+    const isOpen = id in folds ? folds[id] : open;
+    return `<${tag} class="fold ${cls}" data-fold="${id}" ${elId ? `id="${elId}"` : ''} ${isOpen ? 'open' : ''}>
+      <summary class="fold-head"><h2>${title}</h2>${right ? `<span class="fold-right">${right}</span>` : ''}</summary>
+      <div class="fold-body">${body}</div></${tag}>`;
+  }
+  function openFold(id) { folds[id] = true; try { localStorage.setItem(FOLD_KEY, JSON.stringify(folds)); } catch { /* ignore */ } }
+
   /* ================= gear tab ================= */
   function effectsList(it) {
     const lines = (it.effects || []).map(e => `<li style="--c:${EFFECTS[e.id].color}">${EFFECTS[e.id].icon} ${EFFECTS[e.id].desc(e.value)}</li>`);
@@ -508,12 +522,12 @@
     const set = Game.setInfo();
     const slots = Object.keys(SLOTS).map(slot => {
       const it = Game.equippedItem(slot);
-      return `<div class="slot ${it ? 'rarity-' + it.rarity : 'empty'}">
+      return `<button type="button" class="slot ${it ? 'rarity-' + it.rarity : 'empty'} ${backpackFilter === slot ? 'filtering' : ''}" data-slot-filter="${slot}" title="Show spare ${SLOTS[slot].label.toLowerCase()}s">
         <div class="slot-icon">${it ? `<div class="slot-art">${Art.item(it)}</div>` : SLOTS[slot].icon}</div>
         <div class="slot-label">${SLOTS[slot].label}</div>
         <div class="slot-item">${it ? esc(it.name) : 'Empty'}</div>
         ${it ? `<div class="slot-bonus">+${it.bonus}%</div>` : ''}
-      </div>`;
+      </button>`;
     }).join('');
     const inv = s.inventory.slice().sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || b.bonus - a.bonus);
     const swatch = (attr, list, cur) => list.map((c, i) => `<button class="swatch ${i === cur ? 'on' : ''}" style="background:${c}" data-look="${attr}" data-val="${i}" aria-label="${attr} ${i + 1}"></button>`).join('');
@@ -524,25 +538,31 @@
           ${o.color ? `<i class="cape-dot" style="background:${o.color}"></i>` : ''}${ok ? esc(o.name) : `🔒 ${esc(o.name)}`}${ok ? '' : `<small>${esc(lockText(o.req))}</small>`}</button>`;
       })).join('');
 
+    const shown = backpackFilter === 'all' ? inv : inv.filter(it => it.slot === backpackFilter);
+    const filters = [['all', '🎒 All', inv.length], ...Object.entries(SLOTS).map(([k, v]) => [k, `${v.icon} ${v.label}`, inv.filter(it => it.slot === k).length])]
+      .map(([k, l, n]) => `<button class="look-opt ${backpackFilter === k ? 'on' : ''}" data-bp-filter="${k}" ${n || k === 'all' ? '' : 'disabled'}>${l} <small>${n}</small></button>`).join('');
+    const powers = Game.gearStats();
+    const powerCount = Object.keys(EFFECTS).filter(k => powers[k] > 0).length + powers.uniques.size;
+    const pet = s.look.pet && s.pets[s.look.pet] ? `${PETS[s.look.pet].icon} ${PETS[s.look.pet].name} Lv ${s.pets[s.look.pet].level}` : '';
+    const eggs = Object.values(s.pets).filter(p => p.status === 'egg').length;
+
     $('#tab-gear').innerHTML = `
-      <div class="card">
-        <div class="section-head"><h2>Equipped</h2><span class="chip">✨ +${Game.gearBonus()}% XP total</span></div>
+      ${fold('equipped', 'Equipped', `<span class="chip">✨ +${Game.gearBonus()}% XP</span>`, `
         <div class="slots">${slots}</div>
+        <p class="muted tiny">Tap a slot to see your spare gear for it.</p>
         <div class="set-info ${set.bonus ? 'active' : ''}">
           <b>🧩 Gear sets:</b> wear matching materials for a bonus: 3 pieces = <b>+4%</b>, all 5 = <b>+12%</b> XP.
           ${set.count >= 2 ? `<br>You're wearing <b>${set.count} ${esc(set.material)}</b> piece${set.count > 1 ? 's' : ''}${set.bonus ? ` → <b class="ok">+${set.bonus}% set bonus!</b>` : ` (${3 - set.count} more for a bonus)`}` : ''}
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>⚡ Gear powers</h2><span class="muted tiny">From everything you're wearing</span></div>
-        ${gearPowersHTML()}
-      </div>
-      <div class="card" id="pets-card">
-        <div class="section-head"><h2>🐾 Pets</h2><span class="muted tiny">Earn eggs, hatch them with quests, raise your pet to level ${PET_MAX_LEVEL}</span></div>
-        <div class="pets">${petsHTML()}</div>
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>Appearance</h2><span class="muted tiny">Unlock capes and pets by leveling and earning badges</span></div>
+        </div>`, { cls: 'card' })}
+      ${fold('backpack', '🎒 Backpack', `<span class="muted">${inv.length} item${inv.length === 1 ? '' : 's'}</span>`, `
+        <div class="opts bp-filters">${filters}</div>
+        <p class="muted tiny">Sell spares for gold · 🔨 reforge to re-roll effects</p>
+        <div class="items">${shown.map(it => itemCard(it, s.equipped[it.slot] === it.id)).join('') || '<p class="empty">Nothing here yet. Beat enemies and open chests to earn loot!</p>'}</div>`, { cls: 'card', elId: 'backpack' })}
+      ${fold('pets', '🐾 Pets', pet ? `<span class="chip">${pet}</span>` : eggs ? `<span class="chip">🥚 ×${eggs}</span>` : '', `
+        <p class="muted tiny">Earn eggs, hatch them with quests, raise your pet to level ${PET_MAX_LEVEL}.</p>
+        <div class="pets">${petsHTML()}</div>`, { cls: 'card', elId: 'pets-card' })}
+      ${fold('powers', '⚡ Gear powers', powerCount ? `<span class="chip">${powerCount} active</span>` : '', gearPowersHTML(), { cls: 'card', open: false })}
+      ${fold('appearance', '🎨 Appearance', '', `
         <div class="look-grid">
           <div class="look-preview">${Art.hero(s, Game.levelInfo(s.hero.totalXP).level)}</div>
           <div class="look-controls">
@@ -550,14 +570,8 @@
             <div class="look-row"><span>Hair color</span><div class="opts">${swatch('hairColor', LOOKS.hairColors, L.hairColor)}</div></div>
             <div class="look-row"><span>Skin</span><div class="opts">${swatch('skin', LOOKS.skins, L.skin)}</div></div>
             <div class="look-row"><span>Cape</span><div class="opts">${unlockList('cape', LOOKS.capes, L.cape)}</div></div>
-
           </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>Backpack</h2><span class="muted">${inv.length} item${inv.length === 1 ? '' : 's'} · sell spares · 🔨 reforge to re-roll effects</span></div>
-        <div class="items">${inv.map(it => itemCard(it, s.equipped[it.slot] === it.id)).join('') || '<p class="empty">Nothing yet. Beat an enemy to earn loot!</p>'}</div>
-      </div>`;
+        </div>`, { cls: 'card', open: false })}`;
   }
 
   /* ================= shop tab ================= */
@@ -622,25 +636,13 @@
       return `<div class="beast ${n ? 'on' : ''}"><div class="beast-art">${Art.enemy(i)}</div><b>${n ? e.name : '???'}</b><small>${n ? `Defeated ×${n}` : 'Not met yet'}</small></div>`;
     }).join('');
     $('#tab-hero').innerHTML = `
-      <div class="card">
-        <h2>📊 Hero stats</h2>
-        <p class="muted">These grow from what you actually do in real life.</p>
-        <div class="attrs">${attrs}</div>
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>🌳 Skills</h2><span class="chip ${sp.free ? 'chip-gold' : ''}">${sp.free} point${sp.free === 1 ? '' : 's'} to spend</span></div>
+      ${fold('stats', '📊 Hero stats', '', `<p class="muted">These grow from what you actually do in real life.</p><div class="attrs">${attrs}</div>`, { cls: 'card' })}
+      ${fold('skills', '🌳 Skills', `<span class="chip ${sp.free ? 'chip-gold' : ''}">${sp.free} point${sp.free === 1 ? '' : 's'} to spend</span>`, `
         <p class="muted">You get a skill point every 5 levels (${sp.total} earned so far).${sp.total ? '' : ' Your first one comes at level 5.'}</p>
         <div class="skills">${skills}</div>
-        ${sp.spent ? '<button class="btn btn-ghost btn-small mt" id="reset-skills">↩️ Reset skill points</button>' : ''}
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>🏅 Achievements</h2><span class="chip">${got} / ${ACHIEVEMENTS.length}</span></div>
-        <div class="ach-grid">${achs}</div>
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>📖 Bestiary</h2><span class="chip">${Object.keys(s.bestiary).length} / ${ENEMIES.length} types</span></div>
-        <div class="beast-grid">${beasts}</div>
-      </div>`;
+        ${sp.spent ? '<button class="btn btn-ghost btn-small mt" id="reset-skills">↩️ Reset skill points</button>' : ''}`, { cls: 'card' })}
+      ${fold('achievements', '🏅 Achievements', `<span class="chip">${got} / ${ACHIEVEMENTS.length}</span>`, `<div class="ach-grid">${achs}</div>`, { cls: 'card', open: false })}
+      ${fold('bestiary', '📖 Bestiary', `<span class="chip">${Object.keys(s.bestiary).length} / ${ENEMIES.length}</span>`, `<div class="beast-grid">${beasts}</div>`, { cls: 'card', open: false })}`;
   }
 
   /* ================= journey tab ================= */
@@ -746,17 +748,11 @@
     const st = s.settings;
     const notifState = !('Notification' in window) ? 'unsupported' : Notification.permission;
 
+    const ci = Cloud.info();
     $('#tab-journey').innerHTML = `
-      <div class="card">
-        <div class="section-head"><h2>📈 My habits</h2><button class="btn btn-ghost btn-small" id="review-btn">📊 Last week's review</button></div>
-        ${habitsHTML()}
-      </div>
-      <div class="card">
-        <h2>📅 Calendar</h2><p class="muted tiny">Tap a day to see what you did and your notes.</p>
-        ${calendarHTML()}
-      </div>
-      <div class="card">
-        <h2>📈 Progress</h2>
+      ${fold('habits', '📈 My habits', '', `<div class="btn-row fold-actions"><button class="btn btn-ghost btn-small" id="review-btn">📊 Last week's review</button></div>${habitsHTML()}`, { cls: 'card' })}
+      ${fold('calendar', '📅 Calendar', '', `<p class="muted tiny">Tap a day to see what you did and your notes.</p>${calendarHTML()}`, { cls: 'card' })}
+      ${fold('progress', '📈 Progress', '', `
         <h3 class="sub">Workouts per week</h3>
         ${weeklyChart()}
         <div class="stats mt">
@@ -771,15 +767,11 @@
         </div>
         <h3 class="sub mt">Lifetime totals</h3>
         ${reps ? `<ul class="reps">${reps}</ul>` : '<p class="muted">Complete workouts to see your lifetime totals, like “You\'ve done 2,340 push-ups!”</p>'}
-        <button class="btn btn-ghost btn-small mt" id="add-reps">➕ Add missing reps</button>
-      </div>
-      <div class="card">
-        <div class="section-head"><h2>🗺️ Level road</h2>${nr ? `<span class="chip">Next rank: ${nr.title} at Lv ${nr.level}</span>` : ''}</div>
+        <button class="btn btn-ghost btn-small mt" id="add-reps">➕ Add missing reps</button>`, { cls: 'card' })}
+      ${fold('road', '🗺️ Level road', nr ? `<span class="chip">Next: ${nr.title} at Lv ${nr.level}</span>` : '', `
         <p class="muted">The higher your level, the more quests you need each day and the bigger your workouts get. Enemies get tougher too.</p>
-        <ol class="level-road">${rows}</ol>
-      </div>
-      <div class="card" id="settings-card">
-        <h2>⚙️ Settings</h2>
+        <ol class="level-road">${rows}</ol>`, { cls: 'card', open: false })}
+      ${fold('settings', '⚙️ Settings', '', `
         <form id="rename-form" class="inline-form">
           <label class="field"><span>Hero name</span><input name="name" maxlength="20" value="${esc(s.hero.name)}"></label>
           <button class="btn btn-ghost" type="submit">Save</button>
@@ -806,10 +798,9 @@
         <label class="field"><span>💬 Enemy taunts</span>
           <select id="taunt-mode">${[['off', 'Off'], ['normal', 'Normal'], ['savage', '🔥 Savage (harsh and personal)']].map(([v, l]) => `<option value="${v}" ${(st.taunts || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <div class="field"><span>Real-life motivation</span><div><button class="btn btn-ghost" id="reasons-btn2">🎯 Edit reason, rewards & forfeit</button></div></div>
-      </div>
-      <div class="card" id="cloud-card">${cloudCardHTML()}</div>
-      <div class="card" id="sync-card">
-        <h2>🔄 Backup & sync codes</h2>
+      `, { cls: 'card', open: false, elId: 'settings-card' })}
+      ${fold('cloud', '☁️ Cloud sync', ci.email ? '<span class="chip chip-ok">On</span>' : '<span class="chip">Off</span>', `<div id="cloud-card">${cloudCardHTML()}</div>`, { cls: 'card', open: !ci.email })}
+      ${fold('backup', '🔄 Backup & sync codes', '', `
         <p class="muted">Your progress is saved in this browser. To move it to another device (or keep a backup), use a sync code or a backup file.</p>
         <div class="sync-grid">
           <div class="sync-box">
@@ -824,12 +815,8 @@
             <input type="file" id="import-input" accept=".json,application/json" hidden>
           </div>
         </div>
-      </div>
-      <div class="card">
-        <h2>📲 Install as an app</h2>
-        ${installHTML()}
-        <button class="btn btn-danger mt" id="reset-btn">Start over</button>
-      </div>`;
+      `, { cls: 'card', open: false, elId: 'sync-card' })}
+      ${fold('install', '📲 App & data', '', `${installHTML()}<button class="btn btn-danger mt" id="reset-btn">Start over</button>`, { cls: 'card', open: false })}`;
   }
 
   /* ---------- cloud sync ---------- */
@@ -860,7 +847,7 @@ grant select, insert, update on public.saves to authenticated;`;
   }
   function cloudCardHTML() {
     const ci = Cloud.info();
-    const head = '<div class="section-head"><h2>☁️ Cloud sync</h2>' + (ci.email ? '<span class="chip chip-ok">On</span>' : '') + '</div>';
+    const head = '';
     if (!ci.configured) {
       return `${head}
         <p class="muted">Keep your phone and computer in sync automatically. It uses a free <b>Supabase</b> database that you create once (about 5 minutes).</p>
@@ -900,7 +887,11 @@ grant select, insert, update on public.saves to authenticated;`;
       <p class="muted tiny">Project: ${esc(ci.host)}</p>
       <div class="btn-row"><button class="btn btn-primary btn-small" id="cloud-sync">🔄 Sync now</button><button class="btn btn-ghost btn-small" id="cloud-logout">Log out</button></div>`;
   }
-  function renderCloudCard() { const c = document.getElementById('cloud-card'); if (c) c.innerHTML = cloudCardHTML(); }
+  function renderCloudCard() {
+    const c = document.getElementById('cloud-card'); if (c) c.innerHTML = cloudCardHTML();
+    const chip = document.querySelector('[data-fold="cloud"] .fold-right');
+    if (chip) chip.innerHTML = Cloud.info().email ? '<span class="chip chip-ok">On</span>' : '<span class="chip">Off</span>';
+  }
 
   /* Both devices changed since the last sync: let the player pick which one to keep. */
   function cloudConflict(local, remote) {
@@ -1796,6 +1787,15 @@ grant select, insert, update on public.saves to authenticated;`;
         handleEvents(res.events);
         return;
       }
+      const sf = e.target.closest('[data-slot-filter]');
+      if (sf) {
+        backpackFilter = backpackFilter === sf.dataset.slotFilter ? 'all' : sf.dataset.slotFilter;
+        openFold('backpack'); Sound.play('click'); renderGear();
+        if (backpackFilter !== 'all') document.getElementById('backpack').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      const bf = e.target.closest('[data-bp-filter]');
+      if (bf) { backpackFilter = bf.dataset.bpFilter; Sound.play('click'); renderGear(); return; }
       const pt = e.target.closest('[data-pet]');
       if (pt) { Game.setPet(pt.dataset.pet || null); Sound.play('click'); renderAll(); toast(pt.dataset.pet ? `🐾 ${PETS[pt.dataset.pet].name} is coming along!` : 'Your pet is resting at home'); return; }
       const lk = e.target.closest('[data-look]');
@@ -1901,6 +1901,10 @@ grant select, insert, update on public.saves to authenticated;`;
       renderAll(); toast('Name saved');
     });
 
+    document.addEventListener('toggle', (e) => {
+      const d = e.target;
+      if (d && d.dataset && d.dataset.fold) { folds[d.dataset.fold] = d.open; try { localStorage.setItem(FOLD_KEY, JSON.stringify(folds)); } catch { /* ignore */ } }
+    }, true);
     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (Game.state) renderJourney(); });
 
     const tick = () => { if (Game.state) { const rep = Game.ensureToday(); if (rep) { renderAll(); showReport(rep); } checkReminder(); } };
