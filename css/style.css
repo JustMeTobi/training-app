@@ -819,3 +819,10 @@ body.shake { animation: shake .4s ease-out; }
 .conflict-opt:hover { border-color: var(--gold); background: #2a2208; }
 @media (max-width: 420px) { .conflict-grid { grid-template-columns: 1fr; } }
 #toast-root, #toast-root * { pointer-events: none; }
+
+/* coming up (one-off quests planned for a later day) */
+.upcoming-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.upcoming-list li { display: grid; grid-template-columns: 1fr auto auto; gap: .6rem; align-items: center; background: #0e0c22; border: 1px dashed var(--line); border-radius: 12px; padding: .45rem .5rem .45rem .8rem; font-weight: 700; }
+.upcoming-list li b { font-size: .78rem; color: var(--gold); text-transform: capitalize; }
+.upcoming-list .q-action { min-height: 36px; }
+.date-pick { margin-top: -.3rem; }

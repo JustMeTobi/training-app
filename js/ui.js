@@ -347,6 +347,7 @@
         ${d.swaps > 0 ? '<span class="muted tiny tool-hint">🔄 1 workout swap left today · ⏱️ timer on timed workouts</span>' : ''}
       </div>
       ${addOpen ? addForm() : ''}
+      ${upcomingHTML()}
       ${done.length ? `<div class="group done-group">
         <div class="group-head"><h3>✅ Completed today</h3><span class="req ok">${done.length} done</span></div>
         <ul class="quest-list">${done.map(questRow).join('')}</ul>
@@ -402,10 +403,26 @@
   function repeatFields(repeat = 'daily', days = [], { allowOnce = true } = {}) {
     const order = [1, 2, 3, 4, 5, 6, 0];
     return `<label class="field"><span>Repeat</span>
-        <select name="repeat" class="repeat-select"><option value="daily" ${repeat === 'daily' ? 'selected' : ''}>Every day</option><option value="days" ${repeat === 'days' ? 'selected' : ''}>Certain days…</option>${allowOnce ? `<option value="once" ${repeat === 'once' ? 'selected' : ''}>Today only</option>` : ''}</select></label>
+        <select name="repeat" class="repeat-select"><option value="daily" ${repeat === 'daily' ? 'selected' : ''}>Every day</option><option value="days" ${repeat === 'days' ? 'selected' : ''}>Certain days…</option>${allowOnce ? `<option value="once" ${repeat === 'once' ? 'selected' : ''}>Today only</option><option value="tomorrow">Tomorrow only</option><option value="date">On a date…</option>` : ''}</select></label>
+      ${allowOnce ? `<label class="field date-pick" hidden><span>Which day?</span><input type="date" name="date" min="${Game.tomorrowKey()}" value="${Game.tomorrowKey()}"></label>` : ''}
       <div class="day-picker" ${repeat === 'days' ? '' : 'hidden'}>${order.map(i => `<label class="day-chip"><input type="checkbox" name="days" value="${i}" ${days.includes(i) ? 'checked' : ''}><span>${DAY_NAMES[i]}</span></label>`).join('')}</div>`;
   }
-  function syncRepeat(form) { const sel = form.querySelector('.repeat-select'), dp = form.querySelector('.day-picker'); if (sel && dp) dp.hidden = sel.value !== 'days'; }
+  function syncRepeat(form) {
+    const sel = form.querySelector('.repeat-select'), dp = form.querySelector('.day-picker'), dt = form.querySelector('.date-pick');
+    if (sel && dp) dp.hidden = sel.value !== 'days';
+    if (sel && dt) dt.hidden = sel.value !== 'date';
+  }
+
+  function dayLabel(key) {
+    if (key === Game.tomorrowKey()) return 'tomorrow';
+    return Game.keyToDate(key).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+  }
+  function upcomingHTML() {
+    const list = Game.upcomingTasks();
+    if (!list.length) return '';
+    return `<div class="group upcoming"><div class="group-head"><h3>📅 Coming up</h3><span class="req ok">shows up on that day only</span></div>
+      <ul class="upcoming-list">${list.map(t => `<li><span>${t.kind === 'workout' ? '🏋️' : '📜'} ${esc(t.title)}</span><b>${dayLabel(t.day)}</b><button class="q-action del" data-del="${t.id}" aria-label="Delete ${esc(t.title)}" title="Delete">🗑️</button></li>`).join('')}</ul></div>`;
+  }
 
   function addForm() {
     return `<form class="add-form card" id="add-form" autocomplete="off">
@@ -1352,7 +1369,8 @@ grant select, insert, update on public.saves to authenticated;`;
       <div class="look-row"><span>Time I have</span><div class="opts" id="q-time">${chips('time', Object.entries(QUICK_TIMES).map(([k, t]) => [k, `${t.icon} ${t.label}`]), quickPrefs.time)}</div></div>
       <div id="quick-result"></div>
       <div class="modal-actions" id="quick-actions"><button class="btn btn-primary btn-block" id="quick-roll">🎲 Roll!</button></div>`);
-    const root = md.root;
+    // Listen on this popup only (not the shared modal container), so handlers don't pile up between openings.
+    const root = md.root.querySelector('.modal');
     const res = root.querySelector('#quick-result'), acts = root.querySelector('#quick-actions');
     root.addEventListener('click', (e) => {
       const k = e.target.closest('[data-qkind]'), t = e.target.closest('[data-qtime]');
@@ -1753,8 +1771,8 @@ grant select, insert, update on public.saves to authenticated;`;
       if (e.target.id !== 'add-form') return;
       e.preventDefault();
       const f = new FormData(e.target);
-      const t = Game.addTask({ title: f.get('title'), effort: f.get('effort'), kind: f.get('kind'), repeat: f.get('repeat'), days: f.getAll('days'), ...readExercise(f) });
-      if (t) { toast(`📜 New quest: ${t.title}`); addOpen = false; renderAll(); }
+      const t = Game.addTask({ title: f.get('title'), effort: f.get('effort'), kind: f.get('kind'), repeat: f.get('repeat'), days: f.getAll('days'), date: f.get('date'), ...readExercise(f) });
+      if (t) { toast(t.repeat === 'once' && t.day > Game.todayKey() ? `📅 Planned for ${dayLabel(t.day)}: ${t.title}` : `📜 New quest: ${t.title}`); addOpen = false; renderAll(); }
     });
 
     $('#tab-gear').addEventListener('click', (e) => {

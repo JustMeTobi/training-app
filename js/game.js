@@ -273,7 +273,7 @@ const Game = (() => {
       pool = shuffle(WORKOUTS).slice(0, count).map(w => ({ w, scale: 1 }));
     }
     const workouts = pool.map(({ w, scale }) => makeWorkout(w, lv, diff, scale));
-    state.tasks = state.tasks.filter(t => t.repeat !== 'once' || t.day === key);
+    state.tasks = state.tasks.filter(t => t.repeat !== 'once' || t.day >= key);
     const ch = CHALLENGES[hashStr(key + state.hero.name) % CHALLENGES.length];
     const enemy = makeEnemy(lv, diff);
     if (rest) { enemy.sleeping = true; enemy.attack = 0; }
@@ -649,11 +649,17 @@ const Game = (() => {
   }
 
   function cleanDays(days) { return [...new Set((days || []).map(Number).filter(n => n >= 0 && n <= 6))]; }
-  function addTask({ title, effort, kind, repeat, days, exId, amount, customName, customUnit }) {
+  function tomorrowKey() { const d = keyToDate(todayKey()); d.setDate(d.getDate() + 1); return todayKey(d); }
+  /* One-off quests planned for a later day. */
+  function upcomingTasks() { const today = todayKey(); return state.tasks.filter(t => t.repeat === 'once' && t.day > today).sort((a, b) => a.day.localeCompare(b.day)); }
+  function addTask({ title, effort, kind, repeat, days, date, exId, amount, customName, customUnit }) {
     title = String(title || '').trim().slice(0, 80);
     if (!title) return null;
     const t = { id: uid(), title, effort: EFFORTS[effort] ? effort : 'medium', kind: kind === 'workout' ? 'workout' : 'task', repeat: ['once', 'days'].includes(repeat) ? repeat : 'daily', day: todayKey() };
     if (t.repeat === 'days') { t.days = cleanDays(days); if (!t.days.length) t.repeat = 'daily'; }
+    // "Tomorrow only" / "On a date": a one-off quest that shows up on that day only.
+    if (repeat === 'tomorrow') { t.repeat = 'once'; t.day = tomorrowKey(); }
+    if (repeat === 'date') { t.repeat = 'once'; t.day = /^\d{4}-\d{2}-\d{2}$/.test(date || '') && date >= todayKey() ? date : tomorrowKey(); }
     if (t.kind === 'workout') Object.assign(t, resolveExercise({ exId, amount, customName, customUnit }), { linkAsked: true });
     state.tasks.push(t);
     save();
@@ -1084,7 +1090,7 @@ const Game = (() => {
     gearBonus, gearStats, reforge, reforgePrice, setInfo, equippedItem, sellPrice, critChance, comboMult, comboActive, comboLeftMs,
     quests, challengeQuest, quickQuests, rollQuick, acceptQuick, removeQuick, quickFullLeft, payGold, progress, complete, undo, swapWorkout, openChest, addTask, removeTask, equip, discard,
     buy, shopPrice, usePotion, skillPoints, spendSkill, resetSkills, lookUnlocked, setLook, checkAchievements,
-    exerciseInfo, allExercises, resolveExercise, scheduledOn, habitInfo, setNote, dayItems, weekReview, lastWeekKey,
+    exerciseInfo, allExercises, resolveExercise, scheduledOn, upcomingTasks, tomorrowKey, habitInfo, setNote, dayItems, weekReview, lastWeekKey,
     overloadSuggestion, acceptOverload, snoozeOverload, activePet, setPet, onSave, replaceState, detectExercise, updateTask, unlinkedWorkouts, dismissLinking, addReps,
     stakes, setMotivation, hasMotivation, setSetting, ensureToday, start, load, reset, exportData, importData,
     setDifficulty, rename, workoutAmount,
