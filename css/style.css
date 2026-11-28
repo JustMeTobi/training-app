@@ -852,3 +852,6 @@ button.slot.filtering { border-color: var(--gold); box-shadow: 0 0 0 2px #fbbf24
 .bp-filters { margin-bottom: .4rem; }
 .bp-filters .look-opt small { color: var(--muted); font-size: .7rem; }
 .bp-filters .look-opt:disabled { opacity: .4; cursor: default; }
+.modal { position: relative; }
+.modal-x { position: absolute; top: .6rem; right: .6rem; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--card2); color: var(--muted); font-size: 1rem; cursor: pointer; }
+.modal-x:hover { color: var(--text); border-color: var(--gold); }

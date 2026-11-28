@@ -354,7 +354,10 @@ const Game = (() => {
   function rollQuick({ kind = 'any', time = 5 } = {}, exclude = []) {
     const lv = level(), diff = state.hero.difficulty;
     const active = new Set([...(state.day.quick || []).map(q => q.t), ...exclude]);
-    let pool = QUICK_QUESTS.filter(q => q.time === +time && (kind === 'any' || q.kind === kind));
+    // 'go' = on-the-go (seated, quiet) challenges only; the other types use the regular pool.
+    const fits = (q) => kind === 'go' ? q.go : !q.go && (kind === 'any' || q.kind === kind);
+    let pool = QUICK_QUESTS.filter(q => q.time === +time && fits(q));
+    if (!pool.length) pool = QUICK_QUESTS.filter(q => q.time === 15 && fits(q));
     const fresh = pool.filter(q => !active.has(q.t));
     if (fresh.length) pool = fresh;
     const def = pick(pool);
@@ -363,7 +366,7 @@ const Game = (() => {
     const timer = def.fixedTimer || (def.unit === 'sec' ? amount : def.unit === 'min' ? amount * 60 : 0);
     const xp = Math.round(QUICK_TIMES[def.time].xp * DIFFICULTIES[diff].xp * levelXpScale(lv));
     const monster = Math.random() < 0.15 ? makeEnemy(lv, diff) : null;
-    return { t: def.t, title, icon: def.icon, kind: def.kind, time: def.time, amount, exId: def.ex || null, timer, xp, gold: Math.max(3, Math.round(xp / 3)), monster };
+    return { t: def.t, title, icon: def.icon, kind: def.kind, time: def.time, amount, exId: def.ex || null, timer, xp, gold: Math.max(3, Math.round(xp / 3)), monster, go: !!def.go };
   }
   function quickFullLeft() { return Math.max(0, QUICK_FULL_PER_DAY - (state.day.quickDone || 0)); }
   function acceptQuick(c) {
@@ -387,7 +390,7 @@ const Game = (() => {
         key: 'q:' + q.id, quickId: q.id, kind: q.kind, title: q.title, icon: q.icon, exId: q.exId, amount: q.amount,
         attr: q.exId ? (WORKOUTS.find(w => w.id === q.exId) || {}).attr || 'end' : q.kind === 'workout' ? 'end' : 'dis',
         xp: done ? q.xp : Math.round(q.xp * (half ? 0.5 : 1)), gold: q.gold, timer: q.timer, quick: true, time: q.time,
-        monster: q.monster, acceptedAt: q.acceptedAt, speedUntil: q.acceptedAt + q.time * 60 * 1000,
+        monster: q.monster, go: !!q.go, acceptedAt: q.acceptedAt, speedUntil: q.acceptedAt + q.time * 60 * 1000,
         done: !!done, awarded: done?.xp, crit: done?.crit,
       };
     });
@@ -420,7 +423,7 @@ const Game = (() => {
     state.hero.hp = Math.min(heroMaxHP(), state.hero.hp + gs.regen + (crit && gs.uniques.has('vampire') ? 15 : 0));
     const healed = state.hero.hp - hpBefore;
 
-    d.done[key] = { xp, gold, kind: q.kind, at: now, crit, attr: q.attr, exId: q.exId, amount: q.amount, bossDmg, healed, timer: viaTimer, challenge: !!q.challenge, quick: !!q.quick };
+    d.done[key] = { xp, gold, kind: q.kind, at: now, crit, attr: q.attr, exId: q.exId, amount: q.amount, bossDmg, healed, timer: viaTimer, challenge: !!q.challenge, quick: !!q.quick, go: !!q.go };
     state.hero.totalXP += xp;
     addGold(gold);
     state.stats[q.kind === 'workout' ? 'workouts' : 'tasks']++;
@@ -429,7 +432,7 @@ const Game = (() => {
     if (crit) state.stats.crits++;
     if (viaTimer) state.stats.timers++;
     if (q.challenge) state.stats.challenges++;
-    if (q.quick) { d.quickDone = (d.quickDone || 0) + 1; state.stats.quick = (state.stats.quick || 0) + 1; }
+    if (q.quick) { d.quickDone = (d.quickDone || 0) + 1; state.stats.quick = (state.stats.quick || 0) + 1; if (q.go) state.stats.onTheGo = (state.stats.onTheGo || 0) + 1; }
     // Habit tracking for your own repeating quests
     if (q.habit && q.taskId) {
       const h = habit(q.taskId), lvBefore = habitLevel(h.total);
@@ -548,6 +551,7 @@ const Game = (() => {
     if (e.timer) state.stats.timers = Math.max(0, state.stats.timers - 1);
     if (e.challenge) state.stats.challenges = Math.max(0, state.stats.challenges - 1);
     if (e.quick) { state.day.quickDone = Math.max(0, (state.day.quickDone || 0) - 1); state.stats.quick = Math.max(0, (state.stats.quick || 0) - 1); }
+    if (e.go) state.stats.onTheGo = Math.max(0, (state.stats.onTheGo || 0) - 1);
     if (e.bossDmg && state.boss && !state.boss.defeated) state.boss.hp = Math.min(state.boss.maxHp, state.boss.hp + e.bossDmg);
     if (e.healed) state.hero.hp = Math.max(1, state.hero.hp - e.healed);
     if (!progress().met) {

@@ -276,7 +276,7 @@
       if (h.streak >= 2) detail += ` · <span class="habit-streak" title="Habit streak">🔥${h.streak}</span>`;
       if (h.level.n > 0) detail += ` <span class="habit-lv" title="${h.level.name} habit (${h.total} times)">${h.level.icon}</span>`;
     }
-    if (q.quick) detail = `🎲 Quick ${kindLabel.toLowerCase()} · ${QUICK_TIMES[q.time].label}${q.monster && !q.done ? ` · 👾 ${esc(q.monster.name)}` : ''}${q.done ? '' : ` · <span class="speed" data-speed="${q.speedUntil}">${speedText(q.speedUntil)}</span>`}`;
+    if (q.quick) detail = `${q.go ? '🚌 On the go' : `🎲 Quick ${kindLabel.toLowerCase()}`} · ${QUICK_TIMES[q.time].label}${q.monster && !q.done ? ` · 👾 ${esc(q.monster.name)}` : ''}${q.done ? '' : ` · <span class="speed" data-speed="${q.speedUntil}">${speedText(q.speedUntil)}</span>`}`;
     if (q.done) {
       return `<li class="quest done ${q.challenge ? 'challenge' : ''} ${q.quick ? 'quick' : ''} ${q.key === justDone ? 'just-done' : ''}" data-key="${q.key}">
         <span class="check" aria-hidden="true">✓</span>
@@ -326,7 +326,7 @@
         ${d.chest === 'closed' ? `<button class="chest-banner" id="chest-btn" title="Open your daily chest"><span class="chest-icon">🎁</span><span><b>Daily chest</b><small>Tap to open</small></span></button>` : ''}
         <button class="quick-btn" id="quick-btn">
           <span class="quick-dice">🎲</span>
-          <span><b>Quick Quest</b><small>Got a few minutes? ${Game.quickFullLeft()}/${QUICK_FULL_PER_DAY} full rewards left</small></span>
+          <span><b>Quick Quest</b><small>Spare minutes or on the bus? ${Game.quickFullLeft()}/${QUICK_FULL_PER_DAY} full rewards left</small></span>
         </button>
       </div>
       ${overloadCard()}
@@ -1347,17 +1347,23 @@ grant select, insert, update on public.saves to authenticated;`;
   }
 
   /* ---------- quick quest roller ---------- */
+  const QP_KEY = 'questfit.quickPrefs';
   let quickPrefs = { kind: 'any', time: 5 };
+  try { quickPrefs = { ...quickPrefs, ...JSON.parse(localStorage.getItem(QP_KEY) || '{}') }; } catch { /* ignore */ }
+  const saveQuickPrefs = () => { try { localStorage.setItem(QP_KEY, JSON.stringify(quickPrefs)); } catch { /* ignore */ } };
+  const quickTimes = (kind) => Object.entries(QUICK_TIMES).filter(([k]) => kind === 'go' || k !== '30');
   function quickModal() {
     let candidate = null, freeReroll = true;
     const seen = [];
     const chips = (name, opts, cur) => opts.map(([v, l]) => `<button type="button" class="look-opt ${String(cur) === String(v) ? 'on' : ''}" data-q${name}="${v}">${l}</button>`).join('');
     const md = modal(`
+      <button type="button" class="modal-x" data-close aria-label="Close">✕</button>
       <div class="modal-burst quick-burst" id="quick-dice">🎲</div>
       <h2>Quick Quest</h2>
       <p class="muted">Bored and got a few minutes? Roll a random challenge. Finish it within the time for a ⚡ +25% speed bonus.</p>
-      <div class="look-row"><span>Type</span><div class="opts" id="q-kind">${chips('kind', [['workout', '🏋️ Workout'], ['task', '📜 Task'], ['any', '🎲 Surprise me']], quickPrefs.kind)}</div></div>
-      <div class="look-row"><span>Time I have</span><div class="opts" id="q-time">${chips('time', Object.entries(QUICK_TIMES).map(([k, t]) => [k, `${t.icon} ${t.label}`]), quickPrefs.time)}</div></div>
+      <div class="look-row"><span>Type</span><div class="opts" id="q-kind">${chips('kind', [['workout', '🏋️ Workout'], ['task', '📜 Task'], ['go', '🚌 On the go'], ['any', '🎲 Surprise me']], quickPrefs.kind)}</div></div>
+      <p class="muted tiny go-hint" ${quickPrefs.kind === 'go' ? '' : 'hidden'}>🚌 Quiet things you can do sitting down with just your phone: perfect for the bus, train or passenger seat.</p>
+      <div class="look-row"><span>Time I have</span><div class="opts" id="q-time">${chips('time', quickTimes(quickPrefs.kind).map(([k, t]) => [k, `${t.icon} ${t.label}`]), quickPrefs.time)}</div></div>
       <div id="quick-result"></div>
       <div class="modal-actions" id="quick-actions"><button class="btn btn-primary btn-block" id="quick-roll">🎲 Roll!</button></div>`);
     // Listen on this popup only (not the shared modal container), so handlers don't pile up between openings.
@@ -1365,8 +1371,15 @@ grant select, insert, update on public.saves to authenticated;`;
     const res = root.querySelector('#quick-result'), acts = root.querySelector('#quick-actions');
     root.addEventListener('click', (e) => {
       const k = e.target.closest('[data-qkind]'), t = e.target.closest('[data-qtime]');
-      if (k) { quickPrefs.kind = k.dataset.qkind; root.querySelectorAll('[data-qkind]').forEach(b => b.classList.toggle('on', b === k)); Sound.play('click'); }
-      if (t) { quickPrefs.time = +t.dataset.qtime; root.querySelectorAll('[data-qtime]').forEach(b => b.classList.toggle('on', b === t)); Sound.play('click'); }
+      if (k) {
+        quickPrefs.kind = k.dataset.qkind;
+        if (quickPrefs.kind !== 'go' && quickPrefs.time === 30) quickPrefs.time = 15;
+        root.querySelectorAll('[data-qkind]').forEach(b => b.classList.toggle('on', b === k));
+        root.querySelector('.go-hint').hidden = quickPrefs.kind !== 'go';
+        root.querySelector('#q-time').innerHTML = chips('time', quickTimes(quickPrefs.kind).map(([kk, tt]) => [kk, `${tt.icon} ${tt.label}`]), quickPrefs.time);
+        saveQuickPrefs(); Sound.play('click');
+      }
+      if (t) { quickPrefs.time = +t.dataset.qtime; root.querySelectorAll('[data-qtime]').forEach(b => b.classList.toggle('on', b === t)); saveQuickPrefs(); Sound.play('click'); }
       if (e.target.closest('#quick-roll')) roll(false);
       if (e.target.closest('#quick-reroll')) {
         if (!freeReroll && !Game.payGold(10)) { Sound.play('error'); toast('You need 10 gold to reroll.'); return; }
@@ -1389,7 +1402,7 @@ grant select, insert, update on public.saves to authenticated;`;
       acts.innerHTML = '';
       // flash a few random titles before revealing, like a slot machine
       let n = 0;
-      const pool = QUICK_QUESTS.filter(q => q.time === quickPrefs.time && (quickPrefs.kind === 'any' || q.kind === quickPrefs.kind));
+      const pool = QUICK_QUESTS.filter(q => q.time === quickPrefs.time && (quickPrefs.kind === 'go' ? q.go : !q.go && (quickPrefs.kind === 'any' || q.kind === quickPrefs.kind)));
       const iv = setInterval(() => {
         const p = pool[Math.floor(Math.random() * pool.length)];
         res.innerHTML = `<div class="quick-card spinning"><span class="quick-icon">${p.icon}</span><b>${esc(p.t.replace(/\{n\}/g, '?'))}</b></div>`;
@@ -1405,7 +1418,7 @@ grant select, insert, update on public.saves to authenticated;`;
       res.innerHTML = `<div class="quick-card ${candidate.monster ? 'has-monster' : ''}">
         <span class="quick-icon">${candidate.icon}</span>
         <b>${esc(candidate.title)}</b>
-        <small>${candidate.kind === 'workout' ? '🏋️ Workout' : '📜 Task'} · ${QUICK_TIMES[candidate.time].icon} ${QUICK_TIMES[candidate.time].label}${candidate.timer ? ' · ⏱️ timer available' : ''}</small>
+        <small>${candidate.go ? '🚌 On the go' : candidate.kind === 'workout' ? '🏋️ Workout' : '📜 Task'} · ${QUICK_TIMES[candidate.time].icon} ${QUICK_TIMES[candidate.time].label}${candidate.timer ? ' · ⏱️ timer available' : ''}</small>
         <div class="quick-rewards"><span>+${half ? Math.round(candidate.xp / 2) : candidate.xp} XP</span><span>+${half ? Math.round(candidate.gold / 2) : candidate.gold} 🪙</span><span>⚡ +25% if done in ${QUICK_TIMES[candidate.time].label}</span></div>
         ${half ? '<p class="muted tiny">You\'ve used today\'s 5 full-reward Quick Quests, so this one gives 50%.</p>' : ''}
         ${candidate.monster ? `<div class="monster-alert"><div class="monster-art">${Art.enemy(candidate.monster.tier)}</div><span><b>👾 A wandering ${esc(candidate.monster.name)} appears!</b><small>Finish this quest to beat it: it drops gold or gear.</small></span></div>` : ''}

@@ -38,6 +38,7 @@ Open `index.html` in a browser, or host it free on **GitHub Pages** (Settings �
 
 **Daily variety**
 - 🎲 **Quick Quests:** bored and have a few minutes? Roll a random 2, 5 or 15-minute workout or task (about 70 ideas, scaled to your level). Finish it in time for a ⚡ +25% speed bonus; 15% of them bring a 👾 wandering monster that drops gold or gear. They're bonus quests: they don't count toward the daily goal, and the first 5 each day give full rewards (50% after that).
+- 🚌 **On the go:** a Quick Quest type for the bus, train or passenger seat: quiet, seated, phone-friendly challenges (learning, reading, podcasts, planning, journaling, mindfulness, discreet seated exercises), including 30-minute ones for a whole commute.
 - ⭐ **Daily challenge:** a bonus quest each day.
 - 🔄 **Swap:** reroll 1 workout per day.
 - 😴 **Rest day:** pick a weekday. The enemy sleeps and one light activity keeps your streak.

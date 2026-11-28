@@ -218,6 +218,7 @@ const ACHIEVEMENTS = [
   { id: 'pet_max',     icon: '🐾', name: 'Best Friends',     desc: 'Raise a pet to level 10',            test: s => Object.values(s.pets || {}).some(p => p.level >= 10) },
   { id: 'habit_bronze',icon: '🥉', name: 'Habit Forming',    desc: 'Get a habit to Bronze (7 times)',    test: s => Object.values(s.habits || {}).some(h => h.total >= 7) },
   { id: 'habit_gold',  icon: '🥇', name: 'Creature of Habit', desc: 'Get a habit to Gold (100 times)',   test: s => Object.values(s.habits || {}).some(h => h.total >= 100) },
+  { id: 'go_10',       icon: '🚌', name: 'Road Scholar',     desc: 'Complete 10 on-the-go quests',       test: s => (s.stats.onTheGo || 0) >= 10 },
   { id: 'quick_10',    icon: '🎲', name: 'Side Quester',     desc: 'Complete 10 Quick Quests',           test: s => (s.stats.quick || 0) >= 10 },
   { id: 'quick_50',    icon: '🎰', name: 'Never Bored',      desc: 'Complete 50 Quick Quests',           test: s => (s.stats.quick || 0) >= 50 },
   { id: 'monster_1',   icon: '👾', name: 'Monster Ambush',   desc: 'Defeat a wandering monster',         test: s => (s.stats.monsters || 0) >= 1 },
@@ -336,7 +337,50 @@ const QUICK_QUESTS = [
   { kind: 'task', time: 15, icon: '🎸', t: 'Practice an instrument or hobby' },
   { kind: 'task', time: 15, icon: '🧺', t: 'Vacuum the floors' },
 ];
-const QUICK_TIMES = { 2: { label: '2 min', icon: '⚡', xp: 15 }, 5: { label: '5 min', icon: '⏱️', xp: 25 }, 15: { label: '15 min', icon: '🕐', xp: 45 } };
+/* 🚌 On the go: quiet, seated, phone-friendly challenges for the bus, train or passenger seat. */
+QUICK_QUESTS.push(
+  // ⚡ 2 min
+  { go: true, kind: 'workout', time: 2, icon: '🧍', t: 'Sit up straight: shoulders back and down for 2 minutes', fixedTimer: 120 },
+  { go: true, kind: 'workout', time: 2, icon: '🦶', t: '{n} seated calf raises', base: 25, unit: 'reps', ex: 'calves' },
+  { go: true, kind: 'workout', time: 2, icon: '💪', t: 'Brace your core: 5 × 15-second holds', fixedTimer: 120 },
+  { go: true, kind: 'task', time: 2, icon: '🌬️', t: 'Box breathing: in 4, hold 4, out 4, hold 4, for 2 minutes', fixedTimer: 120 },
+  { go: true, kind: 'task', time: 2, icon: '📝', t: 'Write down 3 things you are grateful for in your notes app' },
+  { go: true, kind: 'task', time: 2, icon: '💬', t: 'Send a kind message to someone you care about' },
+  { go: true, kind: 'task', time: 2, icon: '🖼️', t: 'Delete 20 old photos or screenshots' },
+  { go: true, kind: 'task', time: 2, icon: '🎯', t: 'Write down your top 3 goals for today' },
+  // ⏱️ 5 min
+  { go: true, kind: 'workout', time: 5, icon: '🙆', t: 'Seated neck, shoulder and wrist stretches', fixedTimer: 300 },
+  { go: true, kind: 'workout', time: 5, icon: '🍑', t: '{n} glute squeezes (hold each for 3 seconds)', base: 20, unit: 'reps' },
+  { go: true, kind: 'task', time: 5, icon: '🗣️', t: 'Practice a language in a language app for 5 minutes', fixedTimer: 300 },
+  { go: true, kind: 'task', time: 5, icon: '📖', t: 'Read 5 pages of a book or e-book' },
+  { go: true, kind: 'task', time: 5, icon: '📧', t: 'Clear 20 emails from your inbox' },
+  { go: true, kind: 'task', time: 5, icon: '✂️', t: 'Unsubscribe from 5 newsletters or apps that spam you' },
+  { go: true, kind: 'task', time: 5, icon: '🧘', t: 'Guided breathing or meditation with headphones', fixedTimer: 300 },
+  { go: true, kind: 'task', time: 5, icon: '📋', t: 'Plan your evening: what will you do after work?' },
+  { go: true, kind: 'task', time: 5, icon: '💡', t: 'Brainstorm 10 ideas for something you want to improve' },
+  { go: true, kind: 'task', time: 5, icon: '🧠', t: 'Do a sudoku, crossword or brain puzzle' },
+  // 🕐 15 min
+  { go: true, kind: 'task', time: 15, icon: '🎧', t: 'Listen to 15 minutes of a podcast that teaches you something', fixedTimer: 900 },
+  { go: true, kind: 'task', time: 15, icon: '📚', t: 'Read for 15 minutes (book, e-book or audiobook)', fixedTimer: 900 },
+  { go: true, kind: 'task', time: 15, icon: '🗣️', t: 'Language practice for 15 minutes', fixedTimer: 900 },
+  { go: true, kind: 'task', time: 15, icon: '🗓️', t: 'Plan your week: appointments, workouts and meals' },
+  { go: true, kind: 'task', time: 15, icon: '📓', t: 'Journal: how are you feeling and what do you want from this week?' },
+  { go: true, kind: 'task', time: 15, icon: '💰', t: 'Check your budget and spending for this month' },
+  { go: true, kind: 'task', time: 15, icon: '🎓', t: 'Watch a short lesson or tutorial (with headphones)' },
+  { go: true, kind: 'task', time: 15, icon: '📱', t: 'Clean up your phone: delete unused apps and sort your home screen' },
+  { go: true, kind: 'task', time: 15, icon: '🛒', t: 'Plan your meals and write a grocery list' },
+  { go: true, kind: 'workout', time: 15, icon: '🧘', t: 'Seated mobility: ankles, hips, back and neck', fixedTimer: 900 },
+  // 🚌 30 min (a whole commute)
+  { go: true, kind: 'task', time: 30, icon: '📚', t: 'Read for 30 minutes', fixedTimer: 1800 },
+  { go: true, kind: 'task', time: 30, icon: '🎧', t: 'Listen to a full podcast episode or audiobook chapter', fixedTimer: 1800 },
+  { go: true, kind: 'task', time: 30, icon: '🗣️', t: 'Language session: 30 minutes of practice', fixedTimer: 1800 },
+  { go: true, kind: 'task', time: 30, icon: '🎓', t: 'Take one lesson of an online course', fixedTimer: 1800 },
+  { go: true, kind: 'task', time: 30, icon: '✍️', t: 'Write: a journal entry, a story, or plans for a project', fixedTimer: 1800 },
+  { go: true, kind: 'task', time: 30, icon: '🗓️', t: 'Big planning session: your week, goals and to-do list' },
+  { go: true, kind: 'task', time: 30, icon: '🧠', t: 'Learn about a topic you are curious about (articles or videos)', fixedTimer: 1800 },
+  { go: true, kind: 'task', time: 30, icon: '🧘', t: 'Phone-free ride: music or silence, just look out the window and relax', fixedTimer: 1800 },
+);
+const QUICK_TIMES = { 2: { label: '2 min', icon: '⚡', xp: 15 }, 5: { label: '5 min', icon: '⏱️', xp: 25 }, 15: { label: '15 min', icon: '🕐', xp: 45 }, 30: { label: '30 min', icon: '🚌', xp: 75 } };
 const QUICK_FULL_PER_DAY = 5;
 
 /* ---------- v5: exercise tracking for custom workouts ---------- */
